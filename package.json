@@ -1,0 +1,15 @@
+{
+  "name": "structural-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Interactive Structural Analysis Learning Laboratory - deterministic engineering core (Milestone 1)",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "demo": "node src/demo.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,10 @@
+# Verification harness litter (throwaway browser profiles, ports) — stays local
+verify/tmp/
+
+# In case someone runs npm install despite the zero-dependency policy
+node_modules/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
