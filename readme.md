@@ -134,7 +134,9 @@ plan-m4.md … plan-m6.md   milestone plans (the plan-before-code record)
 > are all lowercase (normalized 18 Sep 2026), so the project runs unchanged on
 > case-sensitive filesystems (Linux, GitHub Pages, CI containers).
 
-### Data flow (strictly one-way)```
+### Data flow (strictly one-way)
+
+```
 input event → state {span, loads: [descriptor, …], selectedLoad, supports}
             → engine.analyzeBeam() → result → renderM3()
 
@@ -221,7 +223,8 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
 - **M5 solver coverage**: partial UDL, triangular (both peaks), trapezoidal,
   both cantilever orientations, `dM/dx = V` and `dV/dx = −w` boundary behaviour,
   `linear` full-span ≡ M4 UDL cross-check, resultant/centroid honesty checks,
-  input validation, and a point-load regression cross-check.- **Browser-level verification** (headless Edge via CDP): consolidation
+  input validation, and a point-load regression cross-check.
+- **Browser-level verification** (headless Edge via CDP): consolidation
   harnesses (32 functional checks, 6 layout checks — the M5 regression
   anchors) + multi-load harnesses (19 functional checks: add/select/remove,
   combined resultant, cap enforcement, honesty; 6 multi-load layout
