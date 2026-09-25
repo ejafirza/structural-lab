@@ -446,7 +446,14 @@ function makeBeamDraggable(svg) {
     if (!t) return;
     const role = t.getAttribute('data-role');
     if (role === 'load-handle' || role === 'region-start' || role === 'region-end') {
-      dragging = role;
+      // Two vocabularies, mapped exactly once here: the data-role attribute
+      // identifies a handle in the DOM; the drag id selects the mutation the
+      // pointermove/keyboard handlers apply. The SVG handle role is
+      // 'load-handle'; its drag id is 'load' (M5 consolidation renamed the
+      // attribute but not the mutation — the mismatch left the arrow
+      // un-draggable by mouse until the M6.5 repair; see plan-m6.5.md §1,
+      // and the vocabulary guard in test/interaction-guard.test.js).
+      dragging = role === 'load-handle' ? 'load' : role;
       const group = t.closest('[data-load-index]');
       if (group) {
         const idx = Number(group.getAttribute('data-load-index'));

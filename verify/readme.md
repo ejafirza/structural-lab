@@ -12,7 +12,7 @@ constants were changed; check logic is untouched.
 ```bash
 node verify/consolidation-cdp-verify.mjs     # 32 functional checks (M5 regression anchors)
 node verify/consolidation-layout-check.mjs   # 6 layout checks — point + 5 presets
-node verify/multi-load-cdp-verify.mjs        # 19 functional checks — M6 load list
+node verify/multi-load-cdp-verify.mjs        # 21 functional checks — M6 load list + M6.5 drag regression
 node verify/multi-layout-check.mjs           # 6 layout checks — multi-load configurations
 ```
 
@@ -45,13 +45,19 @@ Since M6 the consolidation pair's *interaction layer* drives the load list (add
 distributed + remove the default point load, instead of the retired concept radio);
 the asserted values and counts are unchanged.
 
-## What they assert (multi-load pair — M6)
+## What they assert (multi-load pair — M6 + M6.5 drag regression)
 
 - Load list: add (+ Point / + Distributed), select (row highlight follows),
   remove (never below one load), summaries, add buttons disabled at the 6-load cap.
 - Combined superposition values on cards and beam (hand-derived: e.g. two point
   loads → RA = 6.67, RB = 8.33, Mmax = 20 kNm; combined `R = 15 kN`, `x̄ = 3.33 m`).
 - Numbered badges ①… on the beam tie each drawing to its list row.
+- **Synthesized pointer drags (M6.5)**: a real pointerdown → pointermove →
+  pointerup sequence on the load arrow moves the load (position value, list
+  summary, and the arrow's on-screen drawing all track it) — the regression
+  for the repaired un-draggable-arrow bug (plan-m6.5.md §1) — and the same
+  drag pattern on a region handle moves the region start. Harness state is
+  restored afterwards so the downstream checks are unaffected.
 - Determinacy honesty with several loads: classification only, combined R still shown.
 - Multi-load layout: no clipping / collisions across crowded point loads,
   point + UDL, a point inside a region, three loads, and the 6-load cap case.

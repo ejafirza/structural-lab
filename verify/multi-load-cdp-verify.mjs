@@ -94,6 +94,30 @@ try {
   const selectRow = (i) => evalJs(`document.querySelectorAll('#load-list .load-row > button:first-child')[${i}].click()`);
   const removeRow = (i) => evalJs(`document.querySelectorAll('#load-list .load-row .load-remove')[${i}].click()`);
   const setSel = (id, v) => evalJs(`(() => { const e = document.getElementById('${id}'); e.value='${v}'; e.dispatchEvent(new Event('change')); })()`);
+  const setNum = (id, v) => evalJs(`(() => { const e = document.getElementById('${id}'); e.value='${v}'; e.dispatchEvent(new Event('input')); })()`);
+
+  // M6.5 drag regression: synthesize a REAL pointer drag on a beam handle
+  // (pointerdown on the handle, pointermove/pointerup on window — the
+  // listeners live there) and report the handle's on-screen centre before
+  // and after. Guards the repaired bug (plan-m6.5.md §1): pointerdown
+  // accepted the 'load-handle' role while pointermove only acted on 'load',
+  // so handle-presence checks stayed green while the arrow never moved.
+  const dragHandle = async (role, dxPx) => evalJs(`(() => {
+    const svg = document.getElementById('beam-svg');
+    const g = svg.querySelector('[data-role="${role}"]');
+    if (!g) return JSON.stringify({ ok: false, why: 'no handle with role ${role}' });
+    const r = g.getBoundingClientRect();
+    const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+    const opts = { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'mouse', isPrimary: true, clientX: cx, clientY: cy };
+    g.dispatchEvent(new PointerEvent('pointerdown', opts));
+    for (let i = 1; i <= 5; i++) {
+      window.dispatchEvent(new PointerEvent('pointermove', { ...opts, clientX: cx + ${dxPx} * i / 5 }));
+    }
+    window.dispatchEvent(new PointerEvent('pointerup', opts));
+    const g2 = svg.querySelector('[data-role="${role}"]');
+    const r2 = g2 ? g2.getBoundingClientRect() : r;
+    return JSON.stringify({ ok: true, cxBefore: cx, cxAfter: r2.x + r2.width / 2 });
+  })()`);
 
   check('page loaded', (await evalJs('document.title')).includes('Structural Lab'));
 
@@ -142,6 +166,52 @@ try {
   await sleep(400);
   s = JSON.parse(await snapshot());
   check('single load again: remove disabled', s.loadCount === 1 && s.removeDisabled[0] === true);
+
+  // 6a. M6.5: a pointer drag must move the selected point load — value,
+  // list summary, and the arrow's on-screen position all track it.
+  {
+    const posBefore = Number(await evalJs(`document.getElementById('num-pos').value`));
+    const drag = JSON.parse(await dragHandle('load-handle', 60));
+    await sleep(400);
+    const posAfterStr = await evalJs(`document.getElementById('num-pos').value`);
+    const posAfter = Number(posAfterStr);
+    const s2 = JSON.parse(await snapshot());
+    const delta = posAfter - posBefore;
+    check('drag: pointer drag moves the load arrow (value, summary, drawing)',
+      drag.ok && delta > 0.05 && delta < 2
+      && s2.rowSummaries[0].replace(/\s+/g, ' ').includes(`@ ${posAfterStr} m`)
+      && (drag.cxAfter - drag.cxBefore) > 20,
+      `num-pos ${posBefore} → ${posAfterStr} (Δ ${delta.toFixed(3)} m), arrow Δpx ${(drag.cxAfter - drag.cxBefore).toFixed(0)}, summary '${s2.rowSummaries[0]}'`);
+  }
+
+  // 6b. Same repair, sibling path: the region-start handle of a distributed
+  // load must drag too (region roles were never broken, but the same
+  // synthesized-drag guard covers both handle families).
+  await clickAdd('btn-add-distributed');
+  await sleep(400);
+  {
+    const beforeStr = await evalJs(`document.getElementById('num-region-start').value`);
+    await dragHandle('region-start', 60);
+    await sleep(400);
+    const afterStr = await evalJs(`document.getElementById('num-region-start').value`);
+    const s2 = JSON.parse(await snapshot());
+    const moved = Number(afterStr) - Number(beforeStr);
+    check('drag: pointer drag moves the region-start handle',
+      moved > 0.05 && moved < 2 && s2.rowSummaries[1].includes(`[${afterStr},`),
+      `region start ${beforeStr} → ${afterStr}, summary '${s2.rowSummaries[1]}'`);
+  }
+
+  // 6c. restore the harness state for the downstream checks
+  await removeRow(1);
+  await sleep(300);
+  await setNum('num-pos', 3);
+  await sleep(300);
+  {
+    const s2 = JSON.parse(await snapshot());
+    check('drag checks: state restored for downstream checks',
+      s2.loadCount === 1 && s2.rowSummaries[0].replace(/\s+/g, ' ').includes('P = 10 kN @ 3 m'),
+      `rows=${s2.loadCount}, summary '${s2.rowSummaries[0]}'`);
+  }
 
   // 7. honesty: indeterminate with multiple loads
   await clickAdd('btn-add-point');

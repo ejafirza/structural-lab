@@ -59,14 +59,14 @@ Requires Node.js ≥ 18. Zero dependencies, no install step.
 
 ```bash
 npm start      # start the app → http://localhost:8000 (browser opens)
-npm test       # run the full automated suite (99 tests)
+npm test       # run the full automated suite (102 tests)
 npm run demo   # ASCII text demo of the engine (Milestone 1)
 ```
 
 > ⚠️ Open the app via `npm start`, not by double-clicking `ui/index.html` —
 > browsers block ES-module imports over `file://`.
 
-**Testing & quality:** 99 automated tests (`npm test`, Node's built-in runner —
+**Testing & quality:** 102 automated tests (`npm test`, Node's built-in runner —
 analytical cases with independently known textbook values, render smoke tests
 against a fake DOM, and static source guards proving the UI contains no
 engineering formulas), plus headless-browser verification harnesses in
@@ -125,6 +125,7 @@ test/linear.test.js        M5 linear solver (11)
 test/ui-m5.test.js         M5 linear render (7)
 test/multi.test.js         M6 multi-load solver (14)
 test/ui-m6.test.js         M6 multi-load render (8)
+test/interaction-guard.test.js  M6.5 drag-wiring source guard (3)
 docs/                original owner briefs (v1 product brief + M2 UI brief)
 verify/              browser-level CDP verification harnesses (see verify/readme.md)
 plan-m4.md … plan-m6.md   milestone plans (the plan-before-code record)
@@ -217,17 +218,19 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
 
 ## Testing & verification
 
-- `npm test` runs **99 tests**: 9 M1 engine + 5 M2 render + 6 classification +
+- `npm test` runs **102 tests**: 9 M1 engine + 5 M2 render + 6 classification +
   8 M3 solver + 5 M3 render + 13 load-model + 9 UDL solver + 4 UDL render +
-  11 linear solver + 7 linear render + 14 multi-load solver + 8 multi-load render.
+  11 linear solver + 7 linear render + 14 multi-load solver + 8 multi-load render +
+  3 interaction source guard (the M6.5 drag-repair guard).
 - **M5 solver coverage**: partial UDL, triangular (both peaks), trapezoidal,
   both cantilever orientations, `dM/dx = V` and `dV/dx = −w` boundary behaviour,
   `linear` full-span ≡ M4 UDL cross-check, resultant/centroid honesty checks,
   input validation, and a point-load regression cross-check.
 - **Browser-level verification** (headless Edge via CDP): consolidation
   harnesses (32 functional checks, 6 layout checks — the M5 regression
-  anchors) + multi-load harnesses (19 functional checks: add/select/remove,
-  combined resultant, cap enforcement, honesty; 6 multi-load layout
+  anchors) + multi-load harnesses (21 functional checks: add/select/remove,
+  combined resultant, cap enforcement, honesty, plus the M6.5 synthesized
+  pointer-drag regression on the load arrow and a region handle; 6 multi-load layout
   configurations). Harnesses live in [`verify/`](verify/readme.md):
   `node verify/consolidation-cdp-verify.mjs`,
   `node verify/consolidation-layout-check.mjs`,
