@@ -13,22 +13,27 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let server, edge;
 try {
-  server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore' });
+    // Sanitize the inherited environment: a PORT exported by an outer tool
+  // (e.g. a dev-server host setting PORT=0) must not rebind our app server
+  // away from its default 8000, which these harnesses address directly.
+  const childEnv = { ...process.env };
+  delete childEnv.PORT;
+  server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env: childEnv });
   await sleep(900);
-  edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run',
+  edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-sync',
     `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(TMP, 'consol-lay-' + Date.now())}`,
     '--window-size=1200,1500', 'about:blank'], { stdio: 'ignore' });
 
   let wsUrl = null;
   for (let i = 0; i < 60 && !wsUrl; i++) {
     try {
-      const list = await (await fetch(`http://localhost:${PORT}/json`)).json();
-      wsUrl = list.find((t) => t.type === 'page')?.webSocketDebuggerUrl;
+      const list = (await (await fetch(`http://localhost:${PORT}/json`)).json()).filter((t) => t.type === 'page' && !/^(edge|chrome):\/\//.test(String(t.url || '')));
+      wsUrl = list[0]?.webSocketDebuggerUrl;
     } catch {}
     if (!wsUrl) await sleep(200);
   }
   const ws = new WebSocket(wsUrl);
-  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; setTimeout(() => rej(new Error('ws open timeout')), 15000); });
 
   let id = 0; const pend = new Map();
   ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && pend.has(m.id)) { pend.get(m.id)(m.result); pend.delete(m.id); } };
@@ -41,6 +46,16 @@ try {
   await send('Page.enable'); await send('Runtime.enable');
   await send('Page.navigate', { url: 'http://localhost:8000/' });
   await sleep(1600);
+  // Wait until the app document is actually live on the attached target
+  // (guards against attaching to a non-app page target).
+  {
+    let ok = false;
+    for (let i = 0; i < 33 && !ok; i++) {
+      try { ok = String(await evalJs('document.title')).includes('Structural Lab'); } catch {}
+      if (!ok) await sleep(300);
+    }
+    if (!ok) throw new Error('app page never became live on the attached target');
+  }
 
   const audit = () => evalJs(`(() => {
     const svgs = ['beam-svg','sfd-svg','bmd-svg'];
@@ -69,6 +84,8 @@ try {
 
   const setRadio = (id) => evalJs(`(() => { const r = document.getElementById('${id}'); r.checked = true; r.dispatchEvent(new Event('change')); })()`);
   const clickPreset = (id) => evalJs(`document.querySelector('#preset-chips .preset-chip[data-preset="${id}"]').click()`);
+  const clickAdd = (id) => evalJs(`document.getElementById('${id}').click()`);
+  const removeLoadRow = (i) => evalJs(`document.querySelectorAll('#load-list .load-row .load-remove')[${i}].click()`);
 
   const configs = [
     ['point', null],
@@ -81,11 +98,20 @@ try {
 
   let bad = 0;
   for (const [name, preset] of configs) {
+    // M6 interaction layer: the concept radio became a load LIST — "switch to
+    // distributed" is now "add distributed + remove the default point load"
+    // (exactly one distributed load remains; "point" restores it).
     if (preset) {
-      await setRadio('concept-distributed');
+      await clickAdd('btn-add-distributed');
+      await sleep(250);
+      await removeLoadRow(0);
+      await sleep(250);
       await clickPreset(preset);
     } else {
-      await setRadio('concept-point');
+      await clickAdd('btn-add-point');
+      await sleep(250);
+      await removeLoadRow(0);
+      await sleep(250);
     }
     await sleep(350);
     const r = await audit();

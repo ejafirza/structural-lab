@@ -1,14 +1,17 @@
 /**
- * renderm3.js — Support- & load-aware visualization layer (M3–M5)
+ * renderm3.js — Support- & load-aware visualization layer (M3–M6)
  * -------------------------------------------------------------
  * PURE RENDERERS. Contains NO engineering mathematics: every plotted point,
  * labeled value, reaction arrow, sign note, resultant and centroid come from
  * the `analyzeBeam` result object. The only computations here are geometric
  * (engineering coordinates → SVG pixels) and presentational (formatting).
  *
- * Load shapes drawn from the descriptor (geometry only):
+ * Load shapes drawn from the descriptors (geometry only):
  *   point → red arrow · udl (full-span) → shaded band · linear → rectangle /
- *   triangle / trapezoid over the sub-region [start, end].
+ *   triangle / trapezoid over the sub-region [start, end]. A beam may carry
+ *   several loads (M6): each is drawn from its own descriptor with a circled
+ *   number tying it to its row in the load list; drag handles exist only on
+ *   the SELECTED load; the combined resultant R, x̄ is drawn once.
  *
  * Visualization convention (owner-approved): BMD drawn on the tension side —
  * sagging (+) BELOW the axis, hogging (−) ABOVE the axis. Engine sign
@@ -17,6 +20,50 @@
 import { makeXMap, fmt } from './render.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Circled digits ①–⑥ tying each drawn load to its load-list row (M6). */
+const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥'];
+
+// --- label placement (pure geometry — no engineering mathematics) ----------
+
+const LABEL_H = 14;
+
+/** Rough text width in SVG units (no DOM measurement available pre-paint). */
+function estimateW(str, size = 13) {
+  return String(str).length * size * 0.58;
+}
+
+function overlaps2D(a, b) {
+  const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  return ox > 2 && oy > 2; // same tolerance as the layout audit harness
+}
+
+/**
+ * Pick the first candidate label spot whose estimated box does not overlap
+ * any already-placed label (and record it). With few loads the first
+ * candidate is always free, so single-load output is unchanged; with several
+ * close loads, later labels cascade down the fallback lanes instead of
+ * stacking on each other.
+ */
+function findFreeSpot(placed, candidates) {
+  for (const c of candidates) {
+    const box = {
+      x: c.anchor === 'start' ? c.x : c.anchor === 'end' ? c.x - c.w : c.x - c.w / 2,
+      y: c.y - LABEL_H,
+      w: c.w,
+      h: LABEL_H + 2,
+    };
+    // Never choose a spot outside the beam panel (the M5 layout audit's
+    // clipping gotcha: labels above the viewBox top edge).
+    if (box.y < 2 || box.x < 4 || box.x + box.w > VB_W - 4) continue;
+    if (!placed.some((p) => overlaps2D(p, box))) {
+      placed.push(box);
+      return c;
+    }
+  }
+  return candidates[0]; // everything collides — draw at the preferred spot
+}
 
 const VB_W = 900;
 const ML = 60;
@@ -169,41 +216,64 @@ function drawReactionsM3(svg, result, xm) {
 
 // --- load drawings ---------------------------------------------------------
 
-function drawPointLoad(svg, result, xm) {
-  const xP = xm.toPx(result.input.position);
+function drawPointLoad(svg, result, xm, load, index, count, selected, placed) {
+  const xP = xm.toPx(load.position);
   const yBeam = 70;
   const flip = xP > VB_W - MR - 160;
-  const lx = flip ? xP - 14 : xP + 14;
-  const anchor = flip ? 'end' : 'start';
+  const anchor0 = flip ? 'end' : 'start';
+  const num = CIRCLED[index] ?? `${index + 1}.`;
+  const label = `${num} P = ${fmt(load.magnitude)} kN`;
+  const spot = findFreeSpot(placed, [
+    // Preferred side first, then the opposite side, then lower lanes.
+    ...[22, 40, 58].flatMap((y) => [
+      { x: flip ? xP - 14 : xP + 14, y, anchor: anchor0, w: estimateW(label) },
+      { x: flip ? xP + 14 : xP - 14, y, anchor: flip ? 'start' : 'end', w: estimateW(label) },
+    ]),
+  ]);
+  // Uniform group structure: every load gets ONE role-less wrapper group
+  // (data-load-index → the load-list row); its draggable handle (if selected)
+  // is a nested group carrying data-role + tabindex.
+  const wrapper = el('g', { 'data-load-index': String(index) });
   const g = el('g', {
-    'data-role': 'load-handle',
-    tabindex: 0,
+    ...(selected ? { 'data-role': 'load-handle', tabindex: 0 } : {}),
     role: 'img',
-    'aria-label': `Point load ${fmt(result.input.load)} kilonewtons at ${fmt(result.input.position)} metres from support A — drag, or focus and use arrow keys, to move`,
+    'aria-label': `Load ${index + 1} of ${count} — point load, ${fmt(load.magnitude)} kilonewtons at ${fmt(load.position)} metres from support A${selected ? ' — drag, or focus and use arrow keys, to move' : ''}`,
   });
+  wrapper.append(g);
   g.append(el('rect', { x: xP - 90, y: 0, width: 180, height: yBeam - 4, fill: 'transparent', 'pointer-events': 'all' }));
   g.append(el('line', { x1: xP, y1: 10, x2: xP, y2: 54, stroke: C.load, 'stroke-width': 3 }));
   g.append(el('polygon', { points: `${xP - 7},52 ${xP + 7},52 ${xP},64`, fill: C.load }));
-  g.append(txt(lx, 22, `P = ${fmt(result.input.load)} kN`, { anchor, fill: C.load, weight: 700, size: 13, halo: true }));
-  g.append(txt(lx, 40, '↔ drag', { anchor, fill: C.guide, size: 11 }));
-  svg.append(g);
+  g.append(txt(spot.x, spot.y, label, { anchor: spot.anchor, fill: C.load, weight: 700, size: 13, halo: true }));
+  if (selected) {
+    const hint = '↔ drag';
+    const hintSpot = findFreeSpot(placed, [
+      { x: spot.x, y: spot.y + 17, anchor: spot.anchor, w: estimateW(hint, 11) },
+    ]);
+    g.append(txt(hintSpot.x, hintSpot.y, hint, { anchor: hintSpot.anchor, fill: C.guide, size: 11 }));
+  }
+  svg.append(wrapper);
 }
 
 /** Extract the [x1, x2, w1, w2] geometry of any distributed load (udl or linear). */
-function distributedGeometry(result) {
-  const d = result.input.loads[0];
-  if (d.type === 'udl') return { x1: 0, x2: result.input.span, w1: d.intensity, w2: d.intensity };
-  return { x1: d.start, x2: d.end, w1: d.wStart, w2: d.wEnd };
+function distributedGeometry(load, span) {
+  if (load.type === 'udl') return { x1: 0, x2: span, w1: load.intensity, w2: load.intensity };
+  return { x1: load.start, x2: load.end, w1: load.wStart, w2: load.wEnd };
 }
 
-function drawDistributedLoad(svg, result, xm) {
-  const { x1, x2, w1, w2 } = distributedGeometry(result);
+function drawDistributedLoad(svg, result, xm, load, index, count, selected, placed) {
+  const { x1, x2, w1, w2 } = distributedGeometry(load, result.input.span);
   const px1 = xm.toPx(x1);
   const px2 = xm.toPx(x2);
   const maxW = Math.max(w1, w2, 1e-9);
   const yBase = 60;
   const maxH = 34;
   const yTopOf = (w) => yBase - (w / maxW) * maxH;
+  const num = CIRCLED[index] ?? `${index + 1}.`;
+
+  // Group wrapper: every load drawing carries data-load-index so the beam
+  // can link back to its load-list row (mirrors the point-load group).
+  const g = el('g', { 'data-load-index': String(index) });
+  svg.append(g);
 
   // Filled shape from the descriptor. Uniform loads render as a `rect`
   // (rectangle); linearly-varying loads render as a `polygon` (triangle or
@@ -211,12 +281,12 @@ function drawDistributedLoad(svg, result, xm) {
   const yTop1 = yTopOf(w1);
   const yTop2 = yTopOf(w2);
   if (Math.abs(w1 - w2) < 1e-12) {
-    svg.append(el('rect', {
+    g.append(el('rect', {
       x: px1, y: yTop1, width: px2 - px1, height: yBase - yTop1,
       fill: C.udlFill, stroke: C.udl, 'stroke-width': 1.5,
     }));
   } else {
-    svg.append(el('polygon', {
+    g.append(el('polygon', {
       points: `${px1},${yBase} ${px1},${yTop1} ${px2},${yTop2} ${px2},${yBase}`,
       fill: C.udlFill, stroke: C.udl, 'stroke-width': 1.5, 'stroke-linejoin': 'round',
     }));
@@ -226,39 +296,94 @@ function drawDistributedLoad(svg, result, xm) {
   const n = Math.max(2, Math.min(6, Math.round((px2 - px1) / 90)));
   for (let i = 1; i < n; i++) {
     const x = px1 + ((px2 - px1) * i) / n;
-    svg.append(el('line', { x1: x, y1: yBase, x2: x, y2: 66, stroke: C.udl, 'stroke-width': 2 }));
-    svg.append(el('polygon', { points: `${x - 4},64 ${x + 4},64 ${x},71`, fill: C.udl }));
+    g.append(el('line', { x1: x, y1: yBase, x2: x, y2: 66, stroke: C.udl, 'stroke-width': 2 }));
+    g.append(el('polygon', { points: `${x - 4},64 ${x + 4},64 ${x},71`, fill: C.udl }));
   }
 
-  // Intensity label (peak value for triangular, range for trapezoidal).
+  // Intensity label (peak value for triangular, range for trapezoidal),
+  // prefixed with the load's circled number. Falls back to higher lanes when
+  // another load's label already occupies the spot above the band.
   const uniform = Math.abs(w1 - w2) < 1e-12;
-  const label = uniform ? `w = ${fmt(w1)} kN/m ↓` : `w: ${fmt(w1)} → ${fmt(w2)} kN/m ↓`;
+  const label = uniform ? `${num} w = ${fmt(w1)} kN/m ↓` : `${num} w: ${fmt(w1)} → ${fmt(w2)} kN/m ↓`;
   const lx = (px1 + px2) / 2;
-  svg.append(txt(lx, Math.min(yTop1, yTop2) - 8, label, { fill: C.udl, weight: 700, size: 13, halo: true }));
+  const topY = Math.min(yTop1, yTop2) - 8;
+  const labelSpot = findFreeSpot(placed, [
+    // Preferred: centred above the band (the M5 position). Fallbacks shift
+    // along the band's top edge (corners, anchored inward) before going any
+    // higher — and findFreeSpot rejects anything outside the panel.
+    { x: lx, y: topY, anchor: 'middle', w: estimateW(label) },
+    { x: px2 - 6, y: topY, anchor: 'end', w: estimateW(label) },
+    { x: px1 + 6, y: topY, anchor: 'start', w: estimateW(label) },
+    { x: lx, y: topY - 18, anchor: 'middle', w: estimateW(label) },
+    { x: lx, y: topY - 36, anchor: 'middle', w: estimateW(label) },
+  ]);
+  g.append(txt(labelSpot.x, labelSpot.y, label, { fill: C.udl, weight: 700, size: 13, halo: true }));
 
-  // Region drag handles (linear only) — dashed boundaries + grab dots.
-  if (result.input.loads[0].type === 'linear') {
+  // Region drag handles (selected linear loads only) — dashed boundaries +
+  // grab dots, nested INSIDE the load's wrapper: the selected load's wrapper
+  // is appended last, so its handles stay visually on top for hit-testing,
+  // and closest('[data-load-index]') resolves through the wrapper.
+  if (selected && load.type === 'linear') {
     for (const [x, role] of [[x1, 'region-start'], [x2, 'region-end']]) {
       const p = xm.toPx(x);
-      const g = el('g', { 'data-role': role, tabindex: 0, role: 'img', 'aria-label': `${role === 'region-start' ? 'Load region start' : 'Load region end'} — drag to move` });
-      g.append(el('rect', { x: p - 16, y: 6, width: 32, height: 64, fill: 'transparent', 'pointer-events': 'all' }));
-      g.append(el('line', { x1: p, y1: 12, x2: p, y2: 64, stroke: C.udl, 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }));
-      g.append(el('circle', { cx: p, cy: 24, r: 5, fill: '#ffffff', stroke: C.udl, 'stroke-width': 2.5 }));
-      svg.append(g);
+      const hg = el('g', {
+        'data-role': role,
+        tabindex: 0,
+        role: 'img',
+        'aria-label': `Load ${index + 1} of ${count} — ${role === 'region-start' ? 'region start' : 'region end'} of distributed load — drag to move`,
+      });
+      hg.append(el('rect', { x: p - 16, y: 6, width: 32, height: 64, fill: 'transparent', 'pointer-events': 'all' }));
+      hg.append(el('line', { x1: p, y1: 12, x2: p, y2: 64, stroke: C.udl, 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }));
+      hg.append(el('circle', { cx: p, cy: 24, r: 5, fill: '#ffffff', stroke: C.udl, 'stroke-width': 2.5 }));
+      g.append(hg);
     }
   }
+}
 
-  // Resultant R (equivalent single force) + centroid x̄ — contextual, on the
-  // beam, so the Results panel stays solution-only. R and x̄ come straight
-  // from the engine (`result.resultant`).
+/**
+ * Combined resultant R, x̄ of the WHOLE load group (single dashed arrow).
+ * Values come straight from the engine (`result.resultant`) — for one
+ * distributed load this is identical to the M5 drawing; for several loads
+ * it is the educational payoff: N loads → ONE equivalent force.
+ */
+function drawCombinedResultant(svg, result, xm, placed) {
   const xR = xm.toPx(result.resultant.position);
   const rFlip = xR > VB_W - MR - 150;
-  const rLx = rFlip ? xR - 10 : xR + 10;
-  const rAnchor = rFlip ? 'end' : 'start';
+  const rLabel = `R = ${fmt(result.resultant.value)} kN`;
+  const rSpot = findFreeSpot(placed, [
+    ...[34, 16, 52].flatMap((y) => [
+      { x: rFlip ? xR - 10 : xR + 10, y, anchor: rFlip ? 'end' : 'start', w: estimateW(rLabel, 12.5) },
+      { x: rFlip ? xR + 10 : xR - 10, y, anchor: rFlip ? 'start' : 'end', w: estimateW(rLabel, 12.5) },
+    ]),
+  ]);
   svg.append(el('line', { x1: xR, y1: 16, x2: xR, y2: 56, stroke: C.udl, 'stroke-width': 2.5, 'stroke-dasharray': '5 3' }));
   svg.append(el('polygon', { points: `${xR - 6},54 ${xR + 6},54 ${xR},66`, fill: C.udl, opacity: 0.9 }));
-  svg.append(txt(rLx, 34, `R = ${fmt(result.resultant.value)} kN`, { anchor: rAnchor, fill: C.udl, weight: 700, size: 12.5, halo: true }));
+  svg.append(txt(rSpot.x, rSpot.y, rLabel, { anchor: rSpot.anchor, fill: C.udl, weight: 700, size: 12.5, halo: true }));
   svg.append(txt(xR, 252, `x̄ = ${fmt(result.resultant.position)} m`, { fill: C.muted, size: 11, halo: true }));
+}
+
+/**
+ * Draw every load from its descriptor, then the combined resultant.
+ * The selected load is drawn LAST so its drag handles sit on top for
+ * hit-testing; every group carries data-load-index for list↔beam linking.
+ */
+function drawLoads(svg, state, result, xm) {
+  const loads = result.input.loads;
+  const sel = typeof state.selectedLoad === 'number' && state.selectedLoad < loads.length ? state.selectedLoad : 0;
+  const placed = []; // occupied label boxes (geometry bookkeeping only)
+  const order = loads.map((_, i) => i).sort((a, b) => (a === sel ? 1 : 0) - (b === sel ? 1 : 0));
+  for (const i of order) {
+    const load = loads[i];
+    if (load.type === 'point') drawPointLoad(svg, result, xm, load, i, loads.length, i === sel, placed);
+    else drawDistributedLoad(svg, result, xm, load, i, loads.length, i === sel, placed);
+  }
+  // The combined resultant R, x̄ is the educational payoff of ANY load group
+  // of two or more loads ("replace them with ONE equivalent force") and of
+  // every distributed load (M5, "one force at its centroid"). It is drawn
+  // for every case EXCEPT the lone point load, where it is redundant (R = P
+  // at a — exactly the load already drawn) and would collide with its labels.
+  const redundant = loads.length === 1 && loads[0].type === 'point';
+  if (!redundant) drawCombinedResultant(svg, result, xm, placed);
 }
 
 // --- dimension + axis helpers ---------------------------------------------
@@ -279,22 +404,29 @@ function dim(svg, x1, x2, y, label) {
   svg.append(txt(lx, y - 8, label, { fill: C.dim, size: 11.5, halo: true, anchor }));
 }
 
-/** x-axis tick marks + labels, load-type aware (0 / a / L, or 0 / L/2 / L, or 0 / x₁ / x₂ / L). */
+/** x-axis tick marks + labels — load-type aware, uncluttered for multi-load. */
 function xAxisLabels(svg, xm, result, labelY) {
-  const type = result.input.loads[0].type;
+  const loads = result.input.loads;
   const L = result.input.span;
+  const type = loads.length === 1 ? loads[0].type : 'combined';
   const tick = (x) => svg.append(el('line', { x1: x, y1: labelY - 18, x2: x, y2: labelY - 10, stroke: C.axis, 'stroke-width': 1.2 }));
   const label = (x, s, anchor = 'middle') => svg.append(txt(x, labelY, s, { fill: C.muted, size: 11.5, halo: true, anchor }));
 
   const markers = [{ x: 0, text: '0', anchor: 'start' }];
   if (type === 'point') {
-    markers.push({ x: result.input.position, text: `a = ${fmt(result.input.position)} m` });
+    markers.push({ x: loads[0].position, text: `a = ${fmt(loads[0].position)} m` });
   } else if (type === 'udl') {
     markers.push({ x: L / 2, text: 'L/2' });
-  } else {
-    const d = result.input.loads[0];
+  } else if (type === 'linear') {
+    const d = loads[0];
     if (d.start > 0) markers.push({ x: d.start, text: `x₁ = ${fmt(d.start)} m` });
     if (d.end < L) markers.push({ x: d.end, text: `x₂ = ${fmt(d.end)} m` });
+  } else if (result.classification.status === 'determinate' && result.maxMoment) {
+    // Multi-load: per-load positions live on the beam panel; the axis keeps
+    // 0, L and the peak position only.
+    if (result.maxMoment.position > 0 && result.maxMoment.position < L) {
+      markers.push({ x: result.maxMoment.position, text: `x* = ${fmt(result.maxMoment.position)} m` });
+    }
   }
   markers.push({ x: L, text: `L = ${fmt(L)} m`, anchor: 'end' });
 
@@ -312,11 +444,11 @@ function renderBeamM3(svg, state, result, xm) {
   const xB = xm.toPx(result.input.span);
   const yBeam = 70;
   const supports = result.input.supports;
-  const type = result.input.loads[0].type;
-  const isDistributed = type === 'udl' || type === 'linear';
+  const loads = result.input.loads;
+  const singlePoint = loads.length === 1 && loads[0].type === 'point';
   const determinate = result.classification.status === 'determinate';
 
-  // Guide line through the load's resultant location.
+  // Guide line through the load group's combined resultant.
   svg.append(el('line', {
     x1: xm.toPx(result.resultant.position), y1: 6,
     x2: xm.toPx(result.resultant.position), y2: H_BEAM - 8,
@@ -334,17 +466,17 @@ function renderBeamM3(svg, state, result, xm) {
 
   if (determinate) drawReactionsM3(svg, result, xm);
 
-  // Dimensions (L always; a/b only for a point load)
+  // Dimensions (L always; a/b only for the single point load, whose legacy
+  // echo carries `b` so no arithmetic happens here).
   dim(svg, xA, xB, 214, `L = ${fmt(result.input.span)} m`);
-  if (!isDistributed) {
-    const xP = xm.toPx(result.input.position);
-    dim(svg, xA, xP, 242, `a = ${fmt(result.input.position)} m`);
+  if (singlePoint) {
+    const xP = xm.toPx(loads[0].position);
+    dim(svg, xA, xP, 242, `a = ${fmt(loads[0].position)} m`);
     dim(svg, xP, xB, 242, `b = ${fmt(result.input.b)} m`);
   }
 
-  // Load
-  if (isDistributed) drawDistributedLoad(svg, result, xm);
-  else drawPointLoad(svg, result, xm);
+  // Loads (each from its own descriptor) + the combined resultant.
+  drawLoads(svg, state, result, xm);
 }
 
 function renderSFDM3(svg, state, result, xm, determinate) {
@@ -354,8 +486,12 @@ function renderSFDM3(svg, state, result, xm, determinate) {
 
   const { shear, shearJump } = result.diagrams;
   const isDistributed = !shearJump;
+  // End shears: at a single point load the last sample is the right-limit
+  // (−RB) and the second sample (the jump pair) is the left-limit (+RA) —
+  // the same pair the M2 reference renderer labels. Combined (M6) beams use
+  // the same end-shear values (RA at 0⁺, −RB at L⁻).
   const V0 = shear[0].V;
-  const VL = shear[shear.length - 1].V;
+  const VL = isDistributed ? shear[shear.length - 1].V : shear[1].V;
   const Vmax = Math.max(Math.abs(V0), Math.abs(VL), 1e-9);
   const y0 = 118;
   const scale = 62 / Vmax;
@@ -374,11 +510,11 @@ function renderSFDM3(svg, state, result, xm, determinate) {
 
   const signOf = (v) => (v > 0 ? '+' : '');
   if (isDistributed) {
-    // Distributed load: no jump — label the end shears.
+    // Distributed load (or multi-load): no single jump — label the end shears.
     svg.append(txt(xA + 8, yOf(V0) - 10, `V = ${signOf(V0)}${fmt(V0)} kN`, { anchor: 'start', fill: C.shear, weight: 700, halo: true }));
     svg.append(txt(xB - 8, yOf(VL) + 20, `V = ${signOf(VL)}${fmt(VL)} kN`, { anchor: 'end', fill: C.shear, weight: 700, halo: true }));
   } else {
-    const xP = xm.toPx(result.input.position);
+    const xP = xm.toPx(result.input.loads[0].position);
     const midL = Math.min(Math.max((xA + xP) / 2, ML + 65), VB_W / 2);
     const midR = Math.max(Math.min((xP + xB) / 2, VB_W - MR - 65), VB_W / 2);
     svg.append(txt(midL, yOf(V0) - 10, `V = ${signOf(V0)}${fmt(V0)} kN`, { fill: C.shear, weight: 700, halo: true }));

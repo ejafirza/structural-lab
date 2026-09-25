@@ -17,9 +17,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let server, edge;
 try {
   mkdirSync(DOCS, { recursive: true });
-  server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore' });
+  // Sanitize the inherited environment (see multi-load-cdp-verify.mjs):
+  // an outer tool exporting PORT would rebind the app server away from 8000.
+  const childEnv = { ...process.env };
+  delete childEnv.PORT;
+  server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env: childEnv });
   await sleep(900);
   edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run',
+    '--headless=new', '--disable-gpu', '--no-first-run', '--disable-sync',
     `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(TMP, 'shot-edge-' + Date.now())}`,
     '--window-size=1200,1500', 'about:blank'], { stdio: 'ignore' });
 
@@ -34,7 +39,7 @@ try {
   if (!wsUrl) throw new Error('Edge did not expose a CDP endpoint');
 
   const ws = new WebSocket(wsUrl);
-  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; setTimeout(() => rej(new Error('ws open timeout')), 15000); });
 
   let id = 0; const pend = new Map();
   ws.onmessage = (e) => {
@@ -57,13 +62,28 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1200, height: 1500, deviceScaleFactor: 2, mobile: false });
   await send('Page.navigate', { url: 'http://localhost:8000/' });
   await sleep(2000);
+  // Wait until the app document is actually live (a screenshot of an error
+  // page would silently overwrite the real ones).
+  {
+    let ok = false;
+    for (let i = 0; i < 33 && !ok; i++) {
+      try { ok = String(await evalJs('document.title')).includes('Structural Lab'); } catch {}
+      if (!ok) await sleep(300);
+    }
+    if (!ok) throw new Error('app page never became live');
+  }
 
   // 1. default point load (P=10 kN at a=3 m, pin+roller)
   await shot('screenshot-point.png');
 
-  // 2. distributed → Full UDL preset
-  await evalJs(`(() => { const r = document.getElementById('concept-distributed'); r.checked = true; r.dispatchEvent(new Event('change')); })()`);
+  // 2. distributed → Full UDL preset (M6 load-list UI: add a distributed
+  // load, remove the default point load — one distributed load remains).
+  await evalJs(`document.getElementById('btn-add-distributed').click()`);
   await sleep(300);
+  await evalJs(`document.querySelectorAll('#load-list .load-row .load-remove')[0].click()`);
+  await sleep(300);
+  // JS click on the chip (the presets panel is display:none while a point
+  // load is selected — a real click would have no geometry in headless mode).
   await evalJs(`document.querySelector('#preset-chips .preset-chip[data-preset="full"]').click()`);
   await sleep(500);
   await shot('screenshot-udl.png');

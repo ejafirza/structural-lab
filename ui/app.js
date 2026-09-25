@@ -1,32 +1,30 @@
 /**
- * app.js — Interaction layer (Milestones 3–5, consolidated UI).
+ * app.js — Interaction layer (Milestones 3–6, load-list UI).
  * -------------------------------------------------------------
  * Owns the UI state and is the ONLY module that talks to the deterministic
  * engine. The renderer (renderm3.js) consumes the `analyzeBeam` result; it
  * never computes engineering values.
  *
- * Consolidated load model (post-M5): two fundamental concepts —
- *   • Point load        → magnitude P (kN) at position a (m).
- *   • Distributed load  → one region [x₁, x₂] with endpoint intensities
- *                         w₁ → w₂ (kN/m), varying linearly between them.
- *
- * Full-span UDL, partial UDL, triangular and trapezoidal are NOT separate
- * modes. They are presets — starting configurations that fill the single
- * distributed-load editor. Selecting a preset never locks the UI; the user
- * can drag the region handles or change w₁/w₂ freely afterwards.
+ * M6 load model: the beam carries a LIST of 1..MAX_LOADS loads (any mix of
+ * point and distributed descriptors — superposed by the engine for ≥ 2).
+ * The list is the single internal model:
+ *   • one row per load; the SELECTED row's editor is the classic editor
+ *     (point fields, or distributed fields + preset chips);
+ *   • "+ Point load" / "+ Distributed load" append and select;
+ *   • the last remaining load cannot be removed (the list never empties);
+ *   • the beam links back: clicking/dragging a load selects its row.
+ * A single load is the one-row case — same editor, same engine call shape.
  */
 import { analyzeBeam } from '../src/analysis.js';
+import { MAX_LOADS } from '../src/loadmodel.js';
 import { SUPPORTS } from '../src/supportmodel.js';
 import { renderM3 } from './renderm3.js';
 import { makeXMap, fmt } from './render.js';
 
 const state = {
   span: 6,
-  loadConcept: 'point',        // 'point' | 'distributed'
-  load: 10,                    // P (kN)
-  position: 3,                 // a (m)
-  regionStart: 1, regionEnd: 5,        // distributed region [x₁, x₂] (m)
-  wStart: 2, wEnd: 2,          // distributed endpoint intensities (kN/m)
+  loads: [{ type: 'point', magnitude: 10, position: 3 }],
+  selectedLoad: 0,             // index into state.loads
   supports: { left: 'pin', right: 'roller' },
 };
 
@@ -45,17 +43,20 @@ const PRESETS = [
   { id: 'trap',      label: 'Trapezoidal',   hint: 'Different intensity at each end',      region: [0, 1],      w: [2, 4] },
 ];
 
+// --- selected load accessors (flat fields stay bound to the selection) ------
+
+function selected() {
+  return state.loads[Math.min(state.selectedLoad, state.loads.length - 1)];
+}
+
+function isSelectedDistributed() {
+  return selected().type !== 'point';
+}
+
 // --- engine input -----------------------------------------------------------
 
 function analyzeInput() {
-  if (state.loadConcept === 'point') {
-    return { span: state.span, load: state.load, position: state.position, supports: state.supports };
-  }
-  return {
-    span: state.span,
-    loads: [{ type: 'linear', start: state.regionStart, end: state.regionEnd, wStart: state.wStart, wEnd: state.wEnd }],
-    supports: state.supports,
-  };
+  return { span: state.span, loads: state.loads, supports: state.supports };
 }
 
 function refreshPosSliderBounds() {
@@ -80,40 +81,169 @@ function solveAndRender() {
 }
 
 function clampPosition() {
-  state.position = clamp(state.position, EDGE_EPS, state.span - EDGE_EPS);
+  const s = selected();
+  if (s.type !== 'point') return;
+  s.position = clamp(s.position, EDGE_EPS, state.span - EDGE_EPS);
 }
 
 function clampRegion() {
-  state.regionStart = clamp(state.regionStart, 0, state.span);
-  state.regionEnd = clamp(state.regionEnd, 0, state.span);
-  if (state.regionEnd - state.regionStart < EDGE_EPS) {
-    state.regionEnd = Math.min(state.span, state.regionStart + EDGE_EPS);
+  const s = selected();
+  if (s.type === 'point') return;
+  s.start = clamp(s.start, 0, state.span);
+  s.end = clamp(s.end, 0, state.span);
+  if (s.end - s.start < EDGE_EPS) {
+    s.end = Math.min(state.span, s.start + EDGE_EPS);
   }
 }
 
 function syncInputs() {
-  $('num-pos').value = fmt(state.position);
-  $('slider-pos').value = state.position;
+  const s = selected();
+  $('num-pos').value = fmt(s.position);
+  $('slider-pos').value = s.position;
 }
 
 function syncRegionInputs() {
-  $('num-region-start').value = fmt(state.regionStart);
-  $('num-region-end').value = fmt(state.regionEnd);
-  $('slider-region-start').value = state.regionStart;
-  $('slider-region-end').value = state.regionEnd;
+  const s = selected();
+  $('num-region-start').value = fmt(s.start);
+  $('num-region-end').value = fmt(s.end);
+  $('slider-region-start').value = s.start;
+  $('slider-region-end').value = s.end;
 }
 
 function syncWInputs() {
-  $('num-w1').value = fmt(state.wStart);
-  $('num-w2').value = fmt(state.wEnd);
-  $('slider-w1').value = state.wStart;
-  $('slider-w2').value = state.wEnd;
+  const s = selected();
+  $('num-w1').value = fmt(s.wStart);
+  $('num-w2').value = fmt(s.wEnd);
+  $('slider-w1').value = s.wStart;
+  $('slider-w2').value = s.wEnd;
 }
 
-// --- load-concept toggle ----------------------------------------------------
+function syncLoadMagnitude() {
+  const s = selected();
+  $('num-load').value = fmt(s.magnitude);
+  $('slider-load').value = s.magnitude;
+}
 
-function updateConceptUI() {
-  const dist = state.loadConcept === 'distributed';
+// --- load-list UI ------------------------------------------------------------
+
+function loadSummary(load) {
+  return load.type === 'point'
+    ? `P = ${fmt(load.magnitude)} kN @ ${fmt(load.position)} m`
+    : `w: ${fmt(load.wStart)}→${fmt(load.wEnd)} kN/m over [${fmt(load.start)}, ${fmt(load.end)}] m`;
+}
+
+function loadAriaLabel(load, i, n) {
+  const kind = load.type === 'point'
+    ? `point load ${fmt(load.magnitude)} kilonewtons at ${fmt(load.position)} metres`
+    : `distributed load ${fmt(load.wStart)} to ${fmt(load.wEnd)} kilonewtons per metre from ${fmt(load.start)} to ${fmt(load.end)} metres`;
+  return `Select load ${i + 1} of ${n} — ${kind}`;
+}
+
+function updateAddButtons() {
+  const full = state.loads.length >= MAX_LOADS;
+  $('btn-add-point').disabled = full;
+  $('btn-add-distributed').disabled = full;
+  $('btn-add-point').title = full ? `At most ${MAX_LOADS} loads` : 'Add a point load';
+  $('btn-add-distributed').title = full ? `At most ${MAX_LOADS} loads` : 'Add a distributed load';
+}
+
+function updateLoadCount() {
+  const n = state.loads.length;
+  $('load-count').textContent = n === 1 ? '(1 load)' : `(${n} loads)`;
+}
+
+/** Selection highlight only — rows keep their DOM identity (and focus). */
+function updateLoadListRowStates() {
+  const rows = document.querySelectorAll('#load-list .load-row > button:first-child');
+  rows.forEach((b, i) => {
+    const active = i === state.selectedLoad;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+/** Rebuild the rows (structure changed: add / remove / field edit). */
+function rebuildLoadList() {
+  const wrap = $('load-list');
+  const n = state.loads.length;
+  wrap.replaceChildren(...state.loads.map((load, i) => {
+    const row = document.createElement('div');
+    row.className = 'load-row';
+
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = i === state.selectedLoad ? 'active' : '';
+    pick.setAttribute('aria-pressed', i === state.selectedLoad ? 'true' : 'false');
+    pick.innerHTML = `<span class="load-badge" aria-hidden="true">${i + 1}</span><span class="load-summary">${loadSummary(load)}</span>`;
+    pick.setAttribute('aria-label', loadAriaLabel(load, i, n));
+    pick.addEventListener('click', () => selectLoad(i));
+
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'load-remove';
+    rm.textContent = '✕';
+    rm.disabled = n <= 1;
+    rm.title = n <= 1 ? 'A beam needs at least one load' : `Remove load ${i + 1}`;
+    rm.setAttribute('aria-label', `Remove load ${i + 1} — ${loadSummary(load)}`);
+    rm.addEventListener('click', () => removeLoad(i));
+
+    row.append(pick, rm);
+    return row;
+  }));
+  updateLoadCount();
+  updateAddButtons();
+}
+
+function announce(msg) {
+  $('load-status').textContent = msg;
+}
+
+function selectLoad(i) {
+  if (i === state.selectedLoad) return;
+  state.selectedLoad = i;
+  updateLoadListRowStates();
+  syncSelectedControls();
+  solveAndRender();
+  const rows = document.querySelectorAll('#load-list .load-row > button:first-child');
+  rows[i]?.focus();
+}
+
+function addLoad(type) {
+  if (state.loads.length >= MAX_LOADS) return;
+  const span = state.span;
+  const third = span / 3;
+  const load = type === 'point'
+    ? { type: 'point', magnitude: 5, position: clamp(2 * third, EDGE_EPS, span - EDGE_EPS) }
+    : { type: 'linear', start: third / 2, end: 2 * third, wStart: 2, wEnd: 2 };
+  state.loads.push(load);
+  state.selectedLoad = state.loads.length - 1;
+  syncSelectedControls();
+  rebuildLoadList();
+  solveAndRender();
+  announce(`Load added — ${state.loads.length} ${state.loads.length === 1 ? 'load' : 'loads'} total`);
+  const rows = document.querySelectorAll('#load-list .load-row > button:first-child');
+  rows[state.selectedLoad]?.focus();
+}
+
+function removeLoad(i) {
+  if (state.loads.length <= 1) return;
+  state.loads.splice(i, 1);
+  state.selectedLoad = Math.min(state.selectedLoad, state.loads.length - 1);
+  syncSelectedControls();
+  rebuildLoadList();
+  solveAndRender();
+  announce(`Load removed — ${state.loads.length} ${state.loads.length === 1 ? 'load' : 'loads'} total`);
+  const rows = document.querySelectorAll('#load-list .load-row > button:first-child');
+  rows[Math.min(i, state.loads.length - 1)]?.focus();
+}
+
+// Show the editor controls for the SELECTED load's concept, and sync all
+// bound inputs to its (possibly newly selected) values.
+function syncSelectedControls() {
+  const dist = isSelectedDistributed();
+  // Point-editor controls are visible when a POINT load is selected;
+  // distributed-editor controls (presets, region, intensities) when a
+  // distributed load is selected — the same mapping as the M5 concept UI.
   $('ctl-load').hidden = dist;
   $('ctl-pos').hidden = dist;
   $('ctl-presets').hidden = !dist;
@@ -121,45 +251,51 @@ function updateConceptUI() {
   $('ctl-region-end').hidden = !dist;
   $('ctl-w1').hidden = !dist;
   $('ctl-w2').hidden = !dist;
+  if (dist) {
+    syncRegionInputs();
+    syncWInputs();
+  } else {
+    syncLoadMagnitude();
+    syncInputs();
+  }
+  updatePresetHighlight();
 }
 
-function bindConceptToggle() {
-  for (const [id, concept] of [['concept-point', 'point'], ['concept-distributed', 'distributed']]) {
-    $(id).addEventListener('change', () => {
-      state.loadConcept = concept;
-      updateConceptUI();
-      updatePresetHighlight();
-      solveAndRender();
-    });
-  }
+function bindLoadListButtons() {
+  $('btn-add-point').addEventListener('click', () => addLoad('point'));
+  $('btn-add-distributed').addEventListener('click', () => addLoad('distributed'));
 }
 
 // --- presets ----------------------------------------------------------------
 
 function applyPreset(p) {
-  state.regionStart = p.region[0] * state.span;
-  state.regionEnd = p.region[1] * state.span;
-  state.wStart = p.w[0];
-  state.wEnd = p.w[1];
+  const s = selected();
+  s.start = p.region[0] * state.span;
+  s.end = p.region[1] * state.span;
+  s.wStart = p.w[0];
+  s.wEnd = p.w[1];
   clampRegion();
   syncRegionInputs();
   syncWInputs();
+  rebuildLoadList();
 }
 
 function matchingPreset() {
+  const s = selected();
+  if (!s || s.type === 'point') return null;
   const T = 0.02;
   const eq = (a, b) => Math.abs(a - b) <= T;
   const hit = PRESETS.find((p) =>
-    eq(state.regionStart, p.region[0] * state.span) &&
-    eq(state.regionEnd, p.region[1] * state.span) &&
-    eq(state.wStart, p.w[0]) &&
-    eq(state.wEnd, p.w[1])
+    eq(s.start, p.region[0] * state.span) &&
+    eq(s.end, p.region[1] * state.span) &&
+    eq(s.wStart, p.w[0]) &&
+    eq(s.wEnd, p.w[1])
   );
   return hit ? hit.id : null;
 }
 
 function updatePresetHighlight() {
-  if (state.loadConcept !== 'distributed') return;
+  if (!isSelectedDistributed()) return;
   const match = matchingPreset();
   for (const b of document.querySelectorAll('#preset-chips .preset-chip')) {
     const active = b.dataset.preset === match;
@@ -208,23 +344,19 @@ function populateSupportSelects() {
   }
 }
 
-// --- numeric inputs + sliders ----------------------------------------------
+// --- numeric inputs + sliders (bound to the SELECTED load) -------------------
 
-function bindNumberSlider(numId, sliderId, key, { min, max, step = 0.1, sanitize, onChange }) {
+function bindNumberSlider(numId, sliderId, apply, { min, max, step = 0.1, sanitize, onChange }) {
   const num = $(numId);
   const slider = $(sliderId);
-  num.value = state[key];
   slider.min = min;
   slider.max = max;
   slider.step = step;
-  slider.value = state[key];
 
   const commit = (raw) => {
     const v = Number(raw);
     if (!Number.isFinite(v)) return;
-    state[key] = sanitize ? sanitize(v) : v;
-    num.value = state[key];
-    slider.value = state[key];
+    apply(sanitize ? sanitize(v) : v);
     onChange?.();
     solveAndRender();
   };
@@ -232,53 +364,71 @@ function bindNumberSlider(numId, sliderId, key, { min, max, step = 0.1, sanitize
   num.addEventListener('input', () => commit(num.value));
   num.addEventListener('blur', () => {
     const v = Number(num.value);
-    if (!Number.isFinite(v)) num.value = fmt(state[key]);
+    if (!Number.isFinite(v)) num.value = fmt(apply(null));
   });
   slider.addEventListener('input', () => commit(slider.value));
 }
 
-bindNumberSlider('num-span', 'slider-span', 'span', {
-  min: 1, max: 20, step: 0.1,
-  sanitize: (v) => clamp(v, 1, 20),
-  onChange: () => {
-    clampPosition();
-    syncInputs();
-    clampRegion();
-    syncRegionInputs();
-    updatePresetHighlight();
+const getSel = () => selected();
+
+bindNumberSlider('num-span', 'slider-span',
+  (v) => { state.span = clamp(v, 1, 20); return state.span; },
+  {
+    min: 1, max: 20, step: 0.1,
+    sanitize: (v) => clamp(v, 1, 20),
+    onChange: () => {
+      state.loads.forEach((s) => {
+        if (s.type === 'point') s.position = clamp(s.position, EDGE_EPS, state.span - EDGE_EPS);
+        else {
+          s.start = clamp(s.start, 0, state.span);
+          s.end = clamp(s.end, 0, state.span);
+          if (s.end - s.start < EDGE_EPS) s.end = Math.min(state.span, s.start + EDGE_EPS);
+        }
+      });
+      syncInputs(); syncRegionInputs(); updatePresetHighlight(); rebuildLoadList();
+    },
+  });
+
+bindNumberSlider('num-load', 'slider-load',
+  (v) => { if (v !== null) getSel().magnitude = v; return getSel().magnitude; },
+  { min: 0.1, max: 100, step: 0.1, sanitize: (v) => clamp(v, 0.1, 100), onChange: rebuildLoadList });
+
+bindNumberSlider('num-pos', 'slider-pos',
+  (v) => {
+    const s = getSel();
+    if (v !== null) s.position = v;
+    return s.position;
   },
-});
-
-bindNumberSlider('num-load', 'slider-load', 'load', {
-  min: 0.1, max: 100, step: 0.1, sanitize: (v) => clamp(v, 0.1, 100),
-});
-
-bindNumberSlider('num-pos', 'slider-pos', 'position', {
-  min: 0, max: state.span, step: 0.01, sanitize: (v) => clamp(v, EDGE_EPS, state.span - EDGE_EPS),
-});
+  { min: 0, max: state.span, step: 0.01, sanitize: (v) => clamp(v, EDGE_EPS, state.span - EDGE_EPS), onChange: rebuildLoadList });
 
 // Region boundaries. `0 ≤ x₁ < x₂ ≤ span` — the outer ends are valid, only the
 // non-zero-width gap is enforced (gracefully, by clamping — never as an error).
-bindNumberSlider('num-region-start', 'slider-region-start', 'regionStart', {
-  min: 0, max: state.span, step: 0.1,
-  sanitize: (v) => { state.regionStart = clamp(v, 0, state.regionEnd - EDGE_EPS); return state.regionStart; },
-  onChange: updatePresetHighlight,
-});
-bindNumberSlider('num-region-end', 'slider-region-end', 'regionEnd', {
-  min: 0, max: state.span, step: 0.1,
-  sanitize: (v) => { state.regionEnd = clamp(v, state.regionStart + EDGE_EPS, state.span); return state.regionEnd; },
-  onChange: updatePresetHighlight,
-});
+bindNumberSlider('num-region-start', 'slider-region-start',
+  (v) => {
+    const s = getSel();
+    if (v !== null) { s.start = clamp(v, 0, s.end - EDGE_EPS); }
+    return s.start;
+  },
+  { min: 0, max: state.span, step: 0.1, onChange: () => { updatePresetHighlight(); rebuildLoadList(); } });
+
+bindNumberSlider('num-region-end', 'slider-region-end',
+  (v) => {
+    const s = getSel();
+    if (v !== null) { s.end = clamp(v, s.start + EDGE_EPS, state.span); }
+    return s.end;
+  },
+  { min: 0, max: state.span, step: 0.1, onChange: () => { updatePresetHighlight(); rebuildLoadList(); } });
 
 // Endpoint intensities. Zero is valid at one end (a triangular load).
-bindNumberSlider('num-w1', 'slider-w1', 'wStart', {
-  min: 0, max: 50, step: 0.1, sanitize: (v) => clamp(v, 0, 50), onChange: updatePresetHighlight,
-});
-bindNumberSlider('num-w2', 'slider-w2', 'wEnd', {
-  min: 0, max: 50, step: 0.1, sanitize: (v) => clamp(v, 0, 50), onChange: updatePresetHighlight,
-});
+bindNumberSlider('num-w1', 'slider-w1',
+  (v) => { if (v !== null) getSel().wStart = v; return getSel().wStart; },
+  { min: 0, max: 50, step: 0.1, sanitize: (v) => clamp(v, 0, 50), onChange: () => { updatePresetHighlight(); rebuildLoadList(); } });
 
-// --- drag interaction (point load + linear region handles) ------------------
+bindNumberSlider('num-w2', 'slider-w2',
+  (v) => { if (v !== null) getSel().wEnd = v; return getSel().wEnd; },
+  { min: 0, max: 50, step: 0.1, sanitize: (v) => clamp(v, 0, 50), onChange: () => { updatePresetHighlight(); rebuildLoadList(); } });
+
+// --- drag interaction (selected load's handles on the beam) ------------------
 
 function makeBeamDraggable(svg) {
   let dragging = null; // 'load' | 'region-start' | 'region-end'
@@ -297,26 +447,41 @@ function makeBeamDraggable(svg) {
     const role = t.getAttribute('data-role');
     if (role === 'load-handle' || role === 'region-start' || role === 'region-end') {
       dragging = role;
+      const group = t.closest('[data-load-index]');
+      if (group) {
+        const idx = Number(group.getAttribute('data-load-index'));
+        if (idx !== state.selectedLoad) selectLoad(idx); // beam → list selection
+      }
       try { svg.setPointerCapture(evt.pointerId); } catch { /* best-effort */ }
       evt.preventDefault();
     }
+  });
+
+  svg.addEventListener('click', (evt) => {
+    // Clicking any load on the beam selects it (drag already handled above).
+    const group = evt.target.closest?.('[data-load-index]');
+    if (!group) return;
+    const idx = Number(group.getAttribute('data-load-index'));
+    if (idx !== state.selectedLoad) selectLoad(idx);
   });
 
   window.addEventListener('pointermove', (evt) => {
     if (!dragging) return;
     const x = beamX(evt);
     if (!Number.isFinite(x)) return;
+    const s = selected();
     if (dragging === 'load') {
-      state.position = clamp(x, EDGE_EPS, state.span - EDGE_EPS);
+      s.position = clamp(x, EDGE_EPS, state.span - EDGE_EPS);
       syncInputs();
     } else if (dragging === 'region-start') {
-      state.regionStart = clamp(x, 0, state.regionEnd - EDGE_EPS);
+      s.start = clamp(x, 0, s.end - EDGE_EPS);
       syncRegionInputs();
     } else if (dragging === 'region-end') {
-      state.regionEnd = clamp(x, state.regionStart + EDGE_EPS, state.span);
+      s.end = clamp(x, s.start + EDGE_EPS, state.span);
       syncRegionInputs();
     }
     updatePresetHighlight();
+    rebuildLoadList();
     solveAndRender();
   });
 
@@ -335,29 +500,31 @@ function makeBeamDraggable(svg) {
     const step = evt.key === 'ArrowLeft' ? -0.1 : evt.key === 'ArrowRight' ? 0.1 : null;
     if (step === null) return;
     evt.preventDefault();
+    const s = selected();
     if (role === 'load-handle') {
-      state.position = clamp(state.position + step, EDGE_EPS, state.span - EDGE_EPS);
+      s.position = clamp(s.position + step, EDGE_EPS, state.span - EDGE_EPS);
       syncInputs();
     } else if (role === 'region-start') {
-      state.regionStart = clamp(state.regionStart + step, 0, state.regionEnd - EDGE_EPS);
+      s.start = clamp(s.start + step, 0, s.end - EDGE_EPS);
       syncRegionInputs();
     } else if (role === 'region-end') {
-      state.regionEnd = clamp(state.regionEnd + step, state.regionStart + EDGE_EPS, state.span);
+      s.end = clamp(s.end + step, s.start + EDGE_EPS, state.span);
       syncRegionInputs();
     } else {
       return;
     }
     updatePresetHighlight();
+    rebuildLoadList();
     solveAndRender();
   });
 }
 
 // --- boot --------------------------------------------------------------------
 
-bindConceptToggle();
 bindPresets();
 populateSupportSelects();
-updateConceptUI();
-syncRegionInputs();
+bindLoadListButtons();
+syncSelectedControls();
+rebuildLoadList();
 makeBeamDraggable(document.getElementById('beam-svg'));
 solveAndRender();

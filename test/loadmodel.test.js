@@ -45,12 +45,19 @@ test('partial-span UDL is rejected (M4 = full-span only)', () => {
   );
 });
 
-test('exactly one load is enforced', () => {
+test('load count is bounded: 1..MAX_LOADS (M6, supersedes the M5 one-load rule)', () => {
+  const twoLoads = [
+    { type: 'point', magnitude: 1, position: 1 },
+    { type: 'point', magnitude: 1, position: 2 },
+  ];
+  // Two loads are now valid (combined solver).
+  assert.equal(normalizeLoads({ loads: twoLoads }, SPAN).length, 2);
+  // Still bounded: empty and over-cap throw; non-array throws.
+  assert.throws(() => normalizeLoads({ loads: [] }, SPAN), RangeError);
   assert.throws(
-    () => normalizeLoads({ loads: [{ type: 'point', magnitude: 1, position: 1 }, { type: 'point', magnitude: 1, position: 2 }] }, SPAN),
+    () => normalizeLoads({ loads: [...twoLoads, ...twoLoads, ...twoLoads, twoLoads[0]] }, SPAN),
     RangeError
   );
-  assert.throws(() => normalizeLoads({ loads: [] }, SPAN), RangeError);
   assert.throws(() => normalizeLoads({ loads: 'x' }, SPAN), TypeError);
 });
 

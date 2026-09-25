@@ -25,19 +25,15 @@
     <section class="panel inputs" aria-label="Model inputs">
       <h2>Model <span class="panel-sub">what you change</span></h2>
       <div class="controls">
-        <fieldset class="ctl concept-group">
-          <legend>Load concept</legend>
-          <div class="concept-toggle" role="radiogroup" aria-label="Load concept">
-            <label class="concept-option">
-              <input type="radio" name="load-concept" id="concept-point" value="point" checked />
-              <span>Point load</span>
-            </label>
-            <label class="concept-option">
-              <input type="radio" name="load-concept" id="concept-distributed" value="distributed" />
-              <span>Distributed load</span>
-            </label>
+        <div class="ctl" id="ctl-loadlist">
+          <span class="ctl-label" id="loadlist-label">Loads <span id="load-count" class="list-count"></span></span>
+          <div class="load-list" id="load-list" role="group" aria-labelledby="loadlist-label"></div>
+          <div class="load-add-row">
+            <button type="button" id="btn-add-point" class="load-add">+ Point load</button>
+            <button type="button" id="btn-add-distributed" class="load-add">+ Distributed load</button>
           </div>
-        </fieldset>
+          <p id="load-status" class="visually-hidden" role="status" aria-live="polite"></p>
+        </div>
         <div class="ctl">
           <label for="sel-support-left">Support at A (left end)</label>
           <select id="sel-support-left" class="support-select"></select>
@@ -124,7 +120,7 @@
     <section class="panel" aria-label="Beam diagram">
       <h2>Beam <span class="panel-sub">supports · load · reactions</span></h2>
       <svg id="beam-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img"
-           aria-label="Beam with two end supports and one load (point or distributed)"></svg>
+           aria-label="Beam with two end supports and its loads (point or distributed)"></svg>
     </section>
 
     <!-- ============================ SFD ============================ -->

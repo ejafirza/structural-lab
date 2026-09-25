@@ -20,22 +20,27 @@ const check = (name, ok, detail = '') => {
 
 let server, edge;
 try {
-  server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore' });
+    // Sanitize the inherited environment: a PORT exported by an outer tool
+  // (e.g. a dev-server host setting PORT=0) must not rebind our app server
+  // away from its default 8000, which these harnesses address directly.
+  const childEnv = { ...process.env };
+  delete childEnv.PORT;
+  server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env: childEnv });
   await sleep(900);
-  edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run',
+  edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-sync',
     `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(TMP, 'consol-edge-' + Date.now())}`,
     '--window-size=1200,1500', 'about:blank'], { stdio: 'ignore' });
 
   let wsUrl = null;
   for (let i = 0; i < 60 && !wsUrl; i++) {
     try {
-      const list = await (await fetch(`http://localhost:${PORT}/json`)).json();
-      wsUrl = list.find((t) => t.type === 'page')?.webSocketDebuggerUrl;
+      const list = (await (await fetch(`http://localhost:${PORT}/json`)).json()).filter((t) => t.type === 'page' && !/^(edge|chrome):\/\//.test(String(t.url || '')));
+      wsUrl = list[0]?.webSocketDebuggerUrl;
     } catch {}
     if (!wsUrl) await sleep(200);
   }
   const ws = new WebSocket(wsUrl);
-  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; setTimeout(() => rej(new Error('ws open timeout')), 15000); });
 
   let id = 0; const pend = new Map(); const errors = [];
   ws.onmessage = (e) => {
@@ -54,6 +59,16 @@ try {
   await send('Page.enable'); await send('Runtime.enable');
   await send('Page.navigate', { url: 'http://localhost:8000/' });
   await sleep(1800);
+  // Wait until the app document is actually live on the attached target
+  // (guards against attaching to a non-app page target).
+  {
+    let ok = false;
+    for (let i = 0; i < 33 && !ok; i++) {
+      try { ok = String(await evalJs('document.title')).includes('Structural Lab'); } catch {}
+      if (!ok) await sleep(300);
+    }
+    if (!ok) throw new Error('app page never became live on the attached target');
+  }
 
   const snapshot = () => evalJs(`JSON.stringify({
     detClass: document.getElementById('det-badge').className,
@@ -75,6 +90,13 @@ try {
   const clickPreset = (id) => evalJs(`document.querySelector('#preset-chips .preset-chip[data-preset="${id}"]').click()`);
   const setSel = (id, v) => evalJs(`(() => { const e = document.getElementById('${id}'); e.value='${v}'; e.dispatchEvent(new Event('change')); })()`);
   const setNum = (id, v) => evalJs(`(() => { const e = document.getElementById('${id}'); e.value='${v}'; e.dispatchEvent(new Event('input')); })()`);
+  // M6 interaction layer: the load-concept radio became a load LIST. The
+  // M5-era "switch to distributed" is now "add a distributed load, remove
+  // the default point load" — leaving exactly one distributed load on the
+  // beam, so every assertion VALUE below still encodes the M5 single-load
+  // results. Assertions and counts unchanged; interaction only.
+  const clickAdd = (id) => evalJs(`document.getElementById('${id}').click()`);
+  const removeLoadRow = (i) => evalJs(`document.querySelectorAll('#load-list .load-row .load-remove')[${i}].click()`);
 
   check('page loaded', (await evalJs('document.title')).includes('Structural Lab'));
 
@@ -86,12 +108,14 @@ try {
   check('point default: no load-description cards', !s.labels.some((l) => l.includes('Resultant') || l.includes('Centroid') || l.includes('intensity')), s.labels.join('|'));
   check('point default: point controls visible, distributed hidden', s.ctlLoadHidden === false && s.ctlW1Hidden === true);
 
-  // 2. switch to distributed → Full UDL preset
-  await setRadio('concept-distributed');
+  // 2. add a distributed load, remove the default point load → Full UDL preset
+  await clickAdd('btn-add-distributed');
   await sleep(300);
   s = JSON.parse(await snapshot());
   check('distributed: controls toggle', s.ctlLoadHidden === true && s.ctlW1Hidden === false && s.ctlPresetsHidden === false);
 
+  await removeLoadRow(0);
+  await sleep(300);
   await clickPreset('full');
   await sleep(400);
   s = JSON.parse(await snapshot());
@@ -160,4 +184,4 @@ try {
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-process.exitCode = failed.length ? 1 : 0;
+process.exit(failed.length ? 1 : 0);

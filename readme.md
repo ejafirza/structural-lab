@@ -38,8 +38,18 @@ civil/structural engineering students, built around the loop
   - Reactions from `(R, x̄)`; piecewise shear (quadratic inside) and moment
     (cubic inside) solved in closed form; peak moment at the analytic `V = 0`
     root. Full-span uniform `linear` ≡ M4 UDL.
-- **Milestone 6 — planned**: combined / multiple loads (superposition over the
-  existing `loads` array).
+- **Milestone 6 — complete**: combined / multiple downward loads (superposition).
+  - Any mix of 1–6 loads (point + distributed together, several point loads,
+    overlapping distributed regions) on the existing `loads` array.
+  - Reactions from the **combined resultant** `R = ΣRᵢ`, `x̄ = ΣRᵢx̄ᵢ/R` —
+    "N loads → one equivalent force" is drawn on the beam.
+  - Shear `V(x) = RA − ΣCᵢ(x)` and moment `M(x) = RA·x − ΣFᵢ(x)` superpose
+    closed-form kernels; point-load shear **jumps** and distributed-load
+    kinks coexist in the sampled arrays. Peak moment found analytically on
+    every segment (no numerics).
+  - Load-list UI: one row per load (select / add / remove); the classic
+    single-load editor is the one-row case. Numbered badges ①–⑥ tie the
+    beam drawing to the list.
 - Roadmap after M6: arbitrary `w(x)` (chained linear segments) → deflection /
   E·I (elastic curve) → UI consolidation pass → AI tutor layer.
 
@@ -49,14 +59,14 @@ Requires Node.js ≥ 18. Zero dependencies, no install step.
 
 ```bash
 npm start      # start the app → http://localhost:8000 (browser opens)
-npm test       # run the full automated suite (77 tests)
+npm test       # run the full automated suite (99 tests)
 npm run demo   # ASCII text demo of the engine (Milestone 1)
 ```
 
 > ⚠️ Open the app via `npm start`, not by double-clicking `ui/index.html` —
 > browsers block ES-module imports over `file://`.
 
-**Testing & quality:** 77 automated tests (`npm test`, Node's built-in runner —
+**Testing & quality:** 99 automated tests (`npm test`, Node's built-in runner —
 analytical cases with independently known textbook values, render smoke tests
 against a fake DOM, and static source guards proving the UI contains no
 engineering formulas), plus headless-browser verification harnesses in
@@ -94,13 +104,13 @@ system.
 ```
 src/engine.js        deterministic point-load solver (PURE) — Milestone 1, FROZEN
 src/supportmodel.js  support catalog + determinacy/stability classification — M3
-src/loadmodel.js     load-type catalog + descriptor normalization — M4/M5
-src/analysis.js      analyzeBeam() dispatcher: point/UDL/linear solvers — M3/M4/M5
+src/loadmodel.js     load-type catalog + descriptor normalization (1..6 loads) — M4/M5/M6
+src/analysis.js      analyzeBeam() dispatcher: point/UDL/linear solvers + combined (M6)
 src/demo.js          ASCII demo of the engine (M1)
-ui/index.html        shell + layout
+ui/index.html        shell + layout (load list since M6)
 ui/app.js            state + input wiring + engine adapter (ONLY importer of the engine)
 ui/render.js         M2 reference renderers (simply supported point load) — FROZEN
-ui/renderm3.js       support- & load-aware renderers (consumes analyzeBeam output)
+ui/renderm3.js       support- & load-aware renderers (multi-load drawing since M6)
 ui/style.css         styling
 server.js            zero-dependency static server (Node http module)
 test/engine.test.js        M1 analytical (9)
@@ -108,38 +118,43 @@ test/ui-smoke.test.js      M2 render (5)
 test/supportmodel.test.js  M3 classification (6)
 test/analysis.test.js      M3 solver (8)
 test/ui-m3.test.js         M3 render (5)
-test/loadmodel.test.js     M4/M5 load normalization (13)
+test/loadmodel.test.js     M4/M5/M6 load normalization (13)
 test/udl.test.js           M4 UDL solver (9)
 test/ui-m4.test.js         M4 UDL render (4)
 test/linear.test.js        M5 linear solver (11)
 test/ui-m5.test.js         M5 linear render (7)
+test/multi.test.js         M6 multi-load solver (14)
+test/ui-m6.test.js         M6 multi-load render (8)
 docs/                original owner briefs (v1 product brief + M2 UI brief)
 verify/              browser-level CDP verification harnesses (see verify/readme.md)
-plan-m4.md, plan-m5.md   milestone plans (the plan-before-code record)
+plan-m4.md … plan-m6.md   milestone plans (the plan-before-code record)
 ```
 
 > **Filename-casing note:** on-disk filenames and ES-module import specifiers
 > are all lowercase (normalized 18 Sep 2026), so the project runs unchanged on
 > case-sensitive filesystems (Linux, GitHub Pages, CI containers).
 
-### Data flow (strictly one-way)
-
-```
-input event → state {span, loadConcept, load, position, regionStart, regionEnd,
-                     wStart, wEnd, supports}
+### Data flow (strictly one-way)```
+input event → state {span, loads: [descriptor, …], selectedLoad, supports}
             → engine.analyzeBeam() → result → renderM3()
 
-- **Controls vs Results**: the Model panel describes what you change (concept,
-  supports, span, load/region/intensity); the Results panel shows only what the
-  structure produces (reactions, Mmax). Load description — intensity, resultant
-  `R`, centroid `x̄` — lives on the beam diagram.
+- **Controls vs Results**: the Model panel describes what you change (the
+  load list + selected load's editor, supports, span); the Results panel
+  shows only what the structure produces (reactions, Mmax). Load description
+  — intensity, resultant `R`, centroid `x̄` — lives on the beam diagram.
 ```
 
 - `ui/app.js` is the **only** module that imports the engine.
 - The renderers receive the engine `result` and map it to SVG geometry; they
   contain **no engineering mathematics** (enforced by static source-guard tests).
-- `analyzeBeam` accepts a general `loads` array (exactly one load) or the
+- `analyzeBeam` accepts a general `loads` array (1..6 loads) or the
   legacy `{load, position}` point-load shorthand, normalized by `loadmodel.js`.
+- Single-load inputs use the frozen M1/M4/M5 solver paths byte-for-byte;
+  `loads.length ≥ 2` routes to the M6 combined solver (`kind: 'beam-multi-load'`),
+  which superposes the closed-form kernels:
+  `R = ΣRᵢ, x̄ = ΣRᵢx̄ᵢ/R`, `RA = R(L − x̄)/L`, `RB = R·x̄/L`,
+  `V(x) = RA − ΣCᵢ(x)`, `M(x) = RA·x − ΣFᵢ(x)` — reactions still depend
+  only on the combined `(R, x̄)`.
 - The point-load branch reuses the frozen Milestone 1 solver; the M4 UDL
   solvers are unchanged, so M1–M4 numbers are preserved byte-for-byte.
 - Every result carries a `resultant` `{ value, position }` (the load's equivalent
@@ -200,20 +215,21 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
 
 ## Testing & verification
 
-- `npm test` runs **77 tests**: 9 M1 engine + 5 M2 render + 6 classification +
+- `npm test` runs **99 tests**: 9 M1 engine + 5 M2 render + 6 classification +
   8 M3 solver + 5 M3 render + 13 load-model + 9 UDL solver + 4 UDL render +
-  11 linear solver + 7 linear render.
+  11 linear solver + 7 linear render + 14 multi-load solver + 8 multi-load render.
 - **M5 solver coverage**: partial UDL, triangular (both peaks), trapezoidal,
   both cantilever orientations, `dM/dx = V` and `dV/dx = −w` boundary behaviour,
   `linear` full-span ≡ M4 UDL cross-check, resultant/centroid honesty checks,
-  input validation, and a point-load regression cross-check.
-- **Browser-level verification** (headless Edge via CDP): 32 functional checks
-  (concept toggle, preset chips, contextual `R`/`x̄` on the beam, clean Results
-  panel, region edits update `R`/`x̄` live and clear the chip highlight,
-   indeterminate honesty, zero console errors) + 6 layout checks (no clipped or
-   overlapping labels across point + all five presets). Harnesses live in
-   [`verify/`](verify/readme.md): `node verify/consolidation-cdp-verify.mjs` and
-  `node verify/consolidation-layout-check.mjs` (each starts the server itself).
+  input validation, and a point-load regression cross-check.- **Browser-level verification** (headless Edge via CDP): consolidation
+  harnesses (32 functional checks, 6 layout checks — the M5 regression
+  anchors) + multi-load harnesses (19 functional checks: add/select/remove,
+  combined resultant, cap enforcement, honesty; 6 multi-load layout
+  configurations). Harnesses live in [`verify/`](verify/readme.md):
+  `node verify/consolidation-cdp-verify.mjs`,
+  `node verify/consolidation-layout-check.mjs`,
+  `node verify/multi-load-cdp-verify.mjs`,
+  `node verify/multi-layout-check.mjs` (each starts the server itself).
 
 ## Educational disclaimer
 

@@ -15,8 +15,9 @@
  *   • triangular    → one of wStart / wEnd = 0
  *   • trapezoidal   → wStart, wEnd > 0 and different
  *
- * Milestone 5 still supports EXACTLY ONE load, and no arbitrary w(x), no
- * numerical integration, no combined loads.
+ * Milestone 6 accepts ONE to MAX_LOADS loads (any mix of point / udl /
+ * linear descriptors, superposed for ≥ 2). Still no arbitrary w(x), no
+ * numerical integration — every solver is closed-form.
  */
 
 /** Load-type metadata (single source of truth for units/names). */
@@ -25,6 +26,13 @@ export const LOAD_TYPES = {
   udl: { name: 'Uniformly distributed load (UDL)', unit: 'kN/m' },
   linear: { name: 'Linear distributed load', unit: 'kN/m' },
 };
+
+/**
+ * Maximum number of loads on one beam (M6). A deliberate cap: it keeps the
+ * diagrams and labels honest at educational scale, and the UI can disable
+ * its add-controls against it. Raise it only with a layout audit re-run.
+ */
+export const MAX_LOADS = 6;
 
 export const LOAD_TYPE_KEYS = Object.keys(LOAD_TYPES);
 
@@ -106,7 +114,8 @@ function normalizeDescriptor(d, span) {
 }
 
 /**
- * Normalize input → array of load descriptors (length 1 in M4/M5).
+ * Normalize input → array of load descriptors (1..MAX_LOADS since M6;
+ * the M4/M5 callers pass exactly one).
  * @param {object} input
  * @param {number} span  validated span (needed for end defaults + range checks)
  * @returns {Array<{type:string}>}
@@ -118,8 +127,13 @@ export function normalizeLoads(input, span) {
     if (!Array.isArray(src.loads)) {
       throw new TypeError('loads must be an array of load descriptors');
     }
-    if (src.loads.length !== 1) {
-      throw new RangeError(`Milestone 5 supports exactly one load (got ${src.loads.length})`);
+    if (src.loads.length < 1) {
+      throw new RangeError('at least one load is required (got an empty loads array)');
+    }
+    if (src.loads.length > MAX_LOADS) {
+      throw new RangeError(
+        `at most ${MAX_LOADS} loads are supported (got ${src.loads.length})`
+      );
     }
     descriptors = src.loads;
   } else {
