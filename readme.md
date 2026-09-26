@@ -69,6 +69,24 @@ civil/structural engineering students, built around the loop
     chips (**Stepped**, **Snow drift ▲**); point cap 6.
 - Roadmap after M7: deflection / E·I (elastic curve) → UI consolidation pass →
   AI tutor layer.
+- **Milestone 8 — complete**: **deflection / elastic curve (E·I)**.
+  - A fourth diagram panel draws the beam's **deflected shape** (exaggerated,
+    with the factor and the true scale printed), plus a **Max deflection**
+    card in mm with its position and sign.
+  - One new input: **beam stiffness E·I** (kN·m²) with four teaching preset
+    chips (Steel / Timber / Concrete / Default) and a logarithmic slider.
+    Change it and watch the beam sag more or less — the Experiment→Observe
+    loop at its most physical.
+  - The curve is **exact**: the moment diagram is integrated twice in closed
+    form per load kernel (point / udl / linear / profile all elementary),
+    constants pinned by the support conditions. The max-sag turning point
+    uses the one bounded root-finder the M6 plan sanctioned (θ = 0 bisection).
+  - **Down-positive convention:** v and θ are reported positive downward (a
+    sagging beam deflects downward); EI·v″ = −M in this convention.
+  - Honesty unchanged: determinate beams only; indeterminate/unstable keep
+    the placeholder and hide the E·I control.
+- Roadmap after M8: UI consolidation pass (the parked declutter list) →
+  AI tutor layer.
 
 ## Quick start
 
@@ -76,14 +94,14 @@ Requires Node.js ≥ 18. Zero dependencies, no install step.
 
 ```bash
 npm start      # start the app → http://localhost:8000 (browser opens)
-npm test       # run the full automated suite (127 tests)
+npm test       # run the full automated suite (143 tests)
 npm run demo   # ASCII text demo of the engine (Milestone 1)
 ```
 
 > ⚠️ Open the app via `npm start`, not by double-clicking `ui/index.html` —
 > browsers block ES-module imports over `file://`.
 
-**Testing & quality:** 127 automated tests (`npm test`, Node's built-in runner —
+**Testing & quality:** 143 automated tests (`npm test`, Node's built-in runner —
 analytical cases with independently known textbook values, render smoke tests
 against a fake DOM, and static source guards proving the UI contains no
 engineering formulas), plus headless-browser verification harnesses in
@@ -107,6 +125,10 @@ system.
   control point** (along the beam and up/down). **Preset chips** (Full UDL,
   Partial UDL, Triangular ▲/▼, Trapezoidal, **Stepped**, **Snow drift ▲**)
   fill the distributed editor — the beam stays the primary workspace.
+- **Set how stiff the beam is** with **E·I** (kN·m²) — one number, a
+  logarithmic slider, and teaching preset chips (steel / timber / concrete /
+  default). Watch the **deflected shape** panel sag more or less, with the
+  true max deflection (mm) printed on the drawing and on a results card.
 - **Choose the two end supports** (A left, B right) from pin / roller / fixed /
   free — symbols, reactions and determinacy verdict update instantly.
 - Adjust **span L**, **load magnitude**, and (for a point load) **position a**
@@ -128,14 +150,15 @@ src/supportmodel.js  support catalog + determinacy/stability classification — 
 src/loadmodel.js     load-type catalog + descriptor normalization (1..6 loads) — M4–M7
                      (M7: `profile` descriptor, `MAX_PROFILE_POINTS`, `emitDescriptor`)
 src/analysis.js      analyzeBeam() dispatcher: point/UDL/linear solvers + combined (M6)
-                     + profile kernels & routing (M7)
+                     + profile kernels & routing (M7) + elastic curve (M8)
 src/demo.js          ASCII demo of the engine (M1)
-ui/index.html        shell + layout (load list since M6, shape-point table since M7)
+ui/index.html        shell + layout (load list since M6, shape-point table since M7,
+                     E·I control + deflection panel since M8)
 ui/app.js            state + input wiring + engine adapter (ONLY importer of the engine;
                      M7: point-list internal model, shape-point table, profile handles)
 ui/render.js         M2 reference renderers (simply supported point load) — FROZEN
 ui/renderm3.js       support- & load-aware renderers (multi-load M6, profile band +
-                     per-point handles M7)
+                     per-point handles M7, deflection panel M8)
 ui/style.css         styling
 server.js            zero-dependency static server (Node http module)
 test/engine.test.js        M1 analytical (9)
@@ -153,9 +176,11 @@ test/ui-m6.test.js         M6 multi-load render (8)
 test/interaction-guard.test.js  M6.5 drag-wiring source guard (3; extended for M7 handles)
 test/profile.test.js       M7 profile solver — Cases A–G (20)
 test/ui-m7.test.js         M7 render + emit rule + point-table interaction (5)
+test/deflection.test.js    M8 elastic curve — Cases A–L (12)
+test/ui-m8.test.js         M8 deflection panel + E·I wiring (4)
 docs/                original owner briefs (v1 product brief + M2 UI brief)
 verify/              browser-level CDP verification harnesses (see verify/readme.md)
-plan-m4.md … plan-m7.md   milestone plans (the plan-before-code record)
+plan-m4.md … plan-m8.md   milestone plans (the plan-before-code record)
 ```
 
 > **Filename-casing note:** on-disk filenames and ES-module import specifiers
@@ -188,6 +213,11 @@ input event → state {span, loads: [descriptor, …], selectedLoad, supports}
   `V(x) = RA − ΣCᵢ(x)`, `M(x) = RA·x − ΣFᵢ(x)` — reactions still depend
   only on the combined `(R, x̄)`. For a profile each kernel is the
   per-segment sum of the M5 closed forms (`profileKernels`).
+- **Deflection (M8)** is a pure add-on on determinate results: the exact
+  moment curve is integrated twice in closed form per load kernel, constants
+  pinned by the support conditions, and the result gains a `deflection`
+  block `{ EI, v, theta, max }` (v down-positive, metres). `EI` is an
+  optional input (teaching default 2.0×10⁴ kN·m², echoed in the result).
 - **The emit rule (M7):** the UI's internal model of a distributed load is
   its control-point list; `emitDescriptor` (loadmodel.js) emits `linear` for
   exactly two points (the frozen M5 descriptor) and `profile` otherwise —
@@ -260,11 +290,12 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
 
 ## Testing & verification
 
-- `npm test` runs **127 tests**: 9 M1 engine + 5 M2 render + 6 classification +
+- `npm test` runs **143 tests**: 9 M1 engine + 5 M2 render + 6 classification +
   8 M3 solver + 5 M3 render + 13 load-model + 9 UDL solver + 4 UDL render +
   11 linear solver + 7 linear render + 14 multi-load solver + 8 multi-load render +
   3 interaction source guard (the M6.5 drag-repair guard, extended for the M7
-  handles) + 20 profile solver (plan-m7 Cases A–G) + 5 M7 render/interaction.
+  handles) + 20 profile solver (plan-m7 Cases A–G) + 5 M7 render/interaction +
+  12 deflection solver (plan-m8 Cases A–L) + 4 M8 render/interaction.
 - **M7 solver coverage**: stepped profile with an interior peak, collinear
   profile ≡ frozen linear solver to 1e-9, gap profile with the `V ≡ 0`
   plateau, both cantilevers, honesty (indeterminate/unstable), validation
@@ -274,6 +305,12 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
   both cantilever orientations, `dM/dx = V` and `dV/dx = −w` boundary behaviour,
   `linear` full-span ≡ M4 UDL cross-check, resultant/centroid honesty checks,
   input validation, and a point-load regression cross-check.
+- **M8 solver coverage**: textbook sags (PL³/48, 5wL⁴/384, PL³/3, wL⁴/8,
+  wL⁴/30, P·a²(3L−a)/6), the off-centre interior turning point, the stepped
+  profile hand-integration with C¹ continuity, superposition pointwise +
+  order independence, 1/EI linearity, honesty (no block when not solved),
+  EI validation + default, derivative identities (dθ/dx = −M/EI,
+  d²v/dx² = −M/EI on clean stencils), and pure-add-on determinism.
 - **Browser-level verification** (headless Edge via CDP): consolidation
   harnesses (32 functional checks, 6 layout checks — the M5 regression
   anchors) + multi-load harnesses (22 functional checks: add/select/remove,
@@ -282,13 +319,18 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
   configurations) + profile harnesses (30 functional checks: presets, point
   table, hand-derived stepped numbers, drag/keyboard handles, emit-rule
   regression, honesty, cap; 8 layout configurations including the 6-point
-  worst case). Harnesses live in [`verify/`](verify/readme.md):
+  worst case) + deflection harnesses (15 functional checks: panel + card
+  hand values, E·I chips/slider/field, cantilever tip, honesty, EI
+  persistence; 8 four-panel layout configurations). Harnesses live in
+  [`verify/`](verify/readme.md):
   `node verify/consolidation-cdp-verify.mjs`,
   `node verify/consolidation-layout-check.mjs`,
   `node verify/multi-load-cdp-verify.mjs`,
   `node verify/multi-layout-check.mjs`,
   `node verify/profile-cdp-verify.mjs`,
-  `node verify/profile-layout-check.mjs` (each starts the server itself).
+  `node verify/profile-layout-check.mjs`,
+  `node verify/deflection-cdp-verify.mjs`,
+  `node verify/deflection-layout-check.mjs` (each starts the server itself).
 
 ## Educational disclaimer
 

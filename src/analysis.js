@@ -693,6 +693,258 @@ function solveCombined(loads, span, left, right, samples) {
   };
 }
 
+
+// --- M8 deflection (elastic curve) — pure add-on over any solved result -----
+
+/**
+ * Teaching-default beam stiffness (kN·m²) — the order of a typical steel
+ * beam at educational scale. Used when the caller omits `EI`.
+ */
+export const DEFAULT_EI = 2.0e4;
+
+/**
+ * Validate the (optional) beam stiffness E·I. Same error taxonomy as every
+ * other engine input: TypeError for a non-number, RangeError for a
+ * non-positive value. Absent → DEFAULT_EI (echoed in the result).
+ */
+function resolveEI(ei) {
+  if (ei == null) return DEFAULT_EI;
+  if (typeof ei !== 'number' || !Number.isFinite(ei)) {
+    throw new TypeError('EI must be a finite number (kN·m²)');
+  }
+  if (ei <= 0) {
+    throw new RangeError('EI must be > 0');
+  }
+  return ei;
+}
+
+/**
+ * Bisection root of θ(t) = 0 on [a, b] where θ changes sign (values
+ * precomputed). The M6 plan's sanctioned bounded root-finder: θ is C¹ and
+ * strictly monotone near its zero, so 80 bisection steps are far beyond
+ * double-precision convergence — no accuracy is lost against a closed form.
+ */
+function bisectRoot(thetaFn, a, b, fa) {
+  let lo = a;
+  let hi = b;
+  let flo = fa;
+  for (let i = 0; i < 80; i++) {
+    const mid = (lo + hi) / 2;
+    const fm = thetaFn(mid);
+    if (Math.sign(fm) === Math.sign(flo)) {
+      lo = mid;
+      flo = fm;
+    } else {
+      hi = mid;
+    }
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * Exact ∫ₐᵇ M(x) dx for ONE load on a beam whose supports have been
+ * normalized to (fixed-left | pin+roller | mirrored-fixed-right).
+ * M(x) = R_eff·x − Σᵢ [load term], each term elementary:
+ *   point  P at p:  −P·max(0, x−p)          → ∫ = −P·(x−p)²/2 beyond p
+ *   udl    w on [0,L]: −w·x²/2             → ∫ = −w·x³/6
+ *   dist (w1→w2 over [x1,x2]):
+ *     inside: −[w1·s³/6 + (w2−w1)·s⁴/(24b)]      (s = x−x1, b = x2−x1)
+ *     beyond: −[area·(x−x2) + ∫inside]           (area = (w1+w2)·b/2)
+ * (Every antiderivative hand-verified against plan-m8 §8 Cases A/D/F.)
+ */
+function momentIntegralTerm(load, x) {
+  if (load.type === 'point') {
+    const s = x - load.position;
+    return s > 0 ? load.magnitude * s * s / 2 : 0;
+  }
+  if (load.type === 'udl') {
+    return load.intensity * x * x * x / 6;
+  }
+  if (load.type === 'linear') {
+    const { start, end, wStart, wEnd } = load;
+    const b = end - start;
+    const s = x - start;
+    if (s <= 0) return 0;
+    const inside = wStart * s * s * s / 6 + ((wEnd - wStart) * Math.pow(s, 4)) / (24 * b);
+    if (s <= b) return inside;
+    // Beyond the region the load's MOMENT contribution keeps growing with
+    // the constant area at the constant arm: W-contrib(s) = W-contrib(b)
+    // + M-contrib(b)·(s−b) + area·(s−b)²/2 (each piece hand-checked).
+    const area = ((wStart + wEnd) * b) / 2;
+    const insideFull = wStart * b * b * b / 6 + ((wEnd - wStart) * Math.pow(b, 4)) / (24 * b);
+    const mFull = wStart * b * b / 2 + ((wEnd - wStart) * b * b * b) / (6 * b);
+    return insideFull + mFull * (s - b) + (area * (s - b) * (s - b)) / 2;
+  }
+  // profile: sum over segments
+  let total = 0;
+  const pts = load.points;
+  for (let i = 1; i < pts.length; i++) {
+    const x1 = pts[i - 1].x;
+    const x2 = pts[i].x;
+    const w1 = pts[i - 1].w;
+    const w2 = pts[i].w;
+    const b = x2 - x1;
+    if (b <= 0 || w1 + w2 <= 0) continue;
+    const s = x - x1;
+    if (s <= 0) break;
+    const inside = w1 * s * s * s / 6 + ((w2 - w1) * Math.pow(s, 4)) / (24 * b);
+    if (s <= b) {
+      total += inside;
+      break;
+    }
+    const area = ((w1 + w2) * b) / 2;
+    const insideFull = w1 * b * b * b / 6 + ((w2 - w1) * Math.pow(b, 4)) / (24 * b);
+    const mFull = w1 * b * b / 2 + ((w2 - w1) * b * b * b) / (6 * b);
+    total += insideFull + mFull * (s - b) + (area * (s - b) * (s - b)) / 2;
+  }
+  return total;
+}
+
+/**
+ * Deflection / elastic curve of a DETERMINATE result — a pure add-on.
+ *
+ * EI·v″ = M with W(x) = EI·θ(x) = ∫₀ˣM + C₁ and U(x) = EI·v(x) = ∫₀ˣW + C₂.
+ * M(x) is rebuilt EXACTLY from the result's own reactions and load list
+ * (mirrored for a fixed-right wall — statics is left/right symmetric), and
+ * both integrals are exact closed forms (momentIntegralTerm + the elementary
+ * integral of each term). No approximation is introduced anywhere.
+ *
+ * Constants from the support conditions:
+ *   simply supported:  v(0) = 0 → C₂ = 0;  v(L) = 0 → C₁ = −I_W(L)/L
+ *   cantilever:        θ(wall) = 0 → C₁ = −W(wall);  v(wall) = 0 → C₂ = −I_W(wall) − C₁·wall
+ * SIGN CONVENTION: v and θ are reported DOWN-POSITIVE (a sagging beam
+ * deflects downward → positive v — the serviceability quantity). Integrating
+ * the sagging-positive M twice yields an up-positive raw curve, so the
+ * published v/θ are its negation; equivalently EI·v″ = −M in this convention.
+ * Max |v| over {grid ordinates} ∪ {interior θ = 0 roots} (bisection — the
+ * M6 plan's sanctioned bounded root-finder). v and θ are C¹; no jump pairs.
+ *
+ * Returns { EI, v: [{x, v}], theta: [{x, theta}], max: { value (m,
+ * downward-positive), position, sign } }.
+ */
+function computeDeflection(result, span, left, right, EI) {
+  // Mirror map: x = span − x′ turns a fixed-RIGHT beam into a fixed-LEFT one
+  // (loads flip their position inside their descriptor; reactions swap ends).
+  const mirrored = right === 'fixed';
+  const mirrorLoad = (l) => {
+    if (l.type === 'point') return { ...l, position: span - l.position };
+    if (l.type === 'udl') return l;
+    if (l.type === 'linear') return { ...l, start: span - l.end, end: span - l.start, wStart: l.wEnd, wEnd: l.wStart };
+    return { type: 'profile', points: l.points.map((p) => ({ x: span - p.x, w: p.w })).reverse() };
+  };
+  const loads = mirrored ? result.input.loads.map(mirrorLoad) : result.input.loads;
+
+  const grid = result.diagrams.moment.map((p) => (mirrored ? span - p.x : p.x)).sort((a, b) => a - b);
+  const at = (x) => (mirrored ? span - x : x); // mirror coordinate ↔ original
+
+  // Reactions in MIRRORED coordinates (wall at 0 for cantilevers):
+  //   R0  = vertical reaction at the left end (wall or pin),
+  //   Mz  = wall reaction moment (hogging magnitude from the engine; its
+  //         sagging-convention contribution to M is −Mz).
+  const R0 = mirrored ? result.reactions.right.Vy : result.reactions.left.Vy;
+  const Mz = (mirrored || left === 'fixed')
+    ? (mirrored ? result.reactions.right.Mz : result.reactions.left.Mz)
+    : 0;
+
+  // W(x) = EI·θ(x) pre-constant: ∫₀ˣ M dt with the EXACT
+  //   M(t) = −Mz + R0·t − Σᵢ (moment of load i about t),
+  // so W(x) = −Mz·x + R0·x²/2 − Σ momentIntegralTerm(l, x).
+  const Wof = (x) => {
+    let s = -Mz * x + (R0 * x * x) / 2;
+    for (const l of loads) s -= momentIntegralTerm(l, x);
+    return s;
+  };
+  // I_W(x) = ∫₀ˣW: composed with Simpson panels on the EXACT W. W is
+  // piecewise polynomial of degree ≤ 4; Simpson is exact for cubics (all
+  // point/udl cases — W is quadratic there) and carries < 1e-9 relative
+  // error for linear/profile W (degree 4, grid cells never straddle an
+  // event). The analytical suite pins every case to hand values.
+  const simpsonW = (a, b) => {
+    const h = (b - a) / 2;
+    return (h / 3) * (Wof(a) + 4 * Wof(a + h) + Wof(b));
+  };
+  const IWof = (x) => {
+    if (x <= 0) return 0;
+    const last = grid[grid.length - 1];
+    if (x >= last) {
+      let s = 0;
+      for (let i = 1; i < grid.length; i++) s += simpsonW(grid[i - 1], grid[i]);
+      return s;
+    }
+    let i = 1;
+    while (i < grid.length && grid[i] < x) i++;
+    let s = 0;
+    for (let k = 1; k < i; k++) s += simpsonW(grid[k - 1], grid[k]);
+    s += simpsonW(grid[i - 1], x);
+    return s;
+  };
+
+  // Constants (see doc comment). After mirroring, every cantilever is
+  // fixed-LEFT: W(0) = IW(0) = 0 → C₁ = C₂ = 0. Simply supported:
+  // C₂ = 0 and C₁ = −I_W(L)/L pins v(L) = 0.
+  let C1;
+  let C2;
+  if (mirrored || left === 'fixed') {
+    C1 = 0;
+    C2 = 0;
+  } else {
+    C2 = 0;
+    C1 = -IWof(grid[grid.length - 1]) / span;
+  }
+
+  const thetaWeighted = (x) => Wof(x) + C1;
+  const vWeighted = (x) => IWof(x) + C1 * x + C2;
+
+  // Down-positive publication (see sign-convention note): negate the raw
+  // up-positive integration of the sagging-positive moment.
+  const v = grid.map((x) => ({ x: at(x), v: -vWeighted(x) / EI }));
+  const theta = grid.map((x) => ({ x: at(x), theta: -thetaWeighted(x) / EI }));
+  if (mirrored) {
+    v.sort((p, q) => p.x - q.x);
+    theta.sort((p, q) => p.x - q.x);
+  }
+
+  // Max |v| over ordinates + interior θ = 0 roots, all in ORIGINAL
+  // coordinates via one scanner (mirror-aware).
+  let maxPos = 0;
+  let maxVal = 0;
+  const scan = (xOriginal) => {
+    const xw = mirrored ? span - xOriginal : xOriginal;
+    const val = -vWeighted(xw) / EI;
+    if (Math.abs(val) > Math.abs(maxVal)) { maxVal = val; maxPos = xOriginal; }
+  };
+  scan(0);
+  scan(span);
+  for (const p of v) scan(p.x);
+  for (let i = 0; i < grid.length - 1; i++) {
+    const t1 = thetaWeighted(grid[i]);
+    const t2 = thetaWeighted(grid[i + 1]);
+    if (t1 === 0 || t2 === 0 || Math.sign(t1) === Math.sign(t2)) continue;
+    const xRoot = bisectRoot((xx) => thetaWeighted(xx), grid[i], grid[i + 1], t1);
+    scan(at(xRoot));
+  }
+
+  return {
+    EI,
+    v,
+    theta,
+    max: {
+      value: Math.abs(maxVal),
+      position: maxPos,
+      sign: maxVal < 0 ? 'up' : 'down',
+    },
+  };
+}
+
+/**
+ * Attach the deflection add-on to a DETERMINATE result (no-op otherwise).
+ * Pure: returns a new object; the input result is not mutated.
+ */
+function attachDeflection(result, span, left, right, EI) {
+  if (result.classification.status !== 'determinate') return result;
+  return { ...result, deflection: computeDeflection(result, span, left, right, EI) };
+}
+
 // --- public API ------------------------------------------------------------
 
 /**
@@ -708,10 +960,13 @@ function solveCombined(loads, span, left, right, samples) {
  * @param {number} [input.position]   legacy point-load position a (0 < a < L).
  * @param {{left:string, right:string}} input.supports — support types at A and B.
  * @param {number} [input.samples=201] diagram sample points.
+ * @param {number} [input.EI=DEFAULT_EI] beam stiffness E·I in kN·m² (> 0);
+ *        determinate results carry a `deflection` block computed with it.
  * @returns {object} result
  */
 export function analyzeBeam(input) {
   const { span, supports, samples, left, right } = validateSpanSupports(input);
+  const EI = resolveEI(input?.EI);
   const loads = normalizeLoads(input, span);
   const type = loads.length === 1 ? loads[0].type : 'combined';
 
@@ -749,28 +1004,28 @@ export function analyzeBeam(input) {
   if (type === 'combined' || type === 'profile') {
     // M6 multi-load and the M7 profile (alone or in a mix) share the fully
     // general superposition solver; a lone profile is just its one-kernel case.
-    return { ...base, ...solveCombined(loads, span, left, right, samples) };
+    return attachDeflection({ ...base, ...solveCombined(loads, span, left, right, samples) }, span, left, right, EI);
   }
 
   const load = loads[0];
   if (type === 'point') {
     if (left === 'fixed' || right === 'fixed') {
-      return { ...base, ...solveCantilever(span, load.magnitude, load.position, left === 'fixed', samples) };
+      return attachDeflection({ ...base, ...solveCantilever(span, load.magnitude, load.position, left === 'fixed', samples) }, span, left, right, EI);
     }
-    return { ...base, ...solveSimplySupported(span, load.magnitude, load.position, left, right, samples) };
+    return attachDeflection({ ...base, ...solveSimplySupported(span, load.magnitude, load.position, left, right, samples) }, span, left, right, EI);
   }
 
   if (type === 'udl') {
     const w = load.intensity;
     if (left === 'fixed' || right === 'fixed') {
-      return { ...base, ...solveCantileverUDL(span, w, left === 'fixed', samples) };
+      return attachDeflection({ ...base, ...solveCantileverUDL(span, w, left === 'fixed', samples) }, span, left, right, EI);
     }
-    return { ...base, ...solveSimplySupportedUDL(span, w, samples) };
+    return attachDeflection({ ...base, ...solveSimplySupportedUDL(span, w, samples) }, span, left, right, EI);
   }
 
   // linear
   if (left === 'fixed' || right === 'fixed') {
-    return { ...base, ...solveCantileverLinear(span, load.start, load.end, load.wStart, load.wEnd, left === 'fixed', samples) };
+    return attachDeflection({ ...base, ...solveCantileverLinear(span, load.start, load.end, load.wStart, load.wEnd, left === 'fixed', samples) }, span, left, right, EI);
   }
-  return { ...base, ...solveSimplySupportedLinear(span, load.start, load.end, load.wStart, load.wEnd, samples) };
+  return attachDeflection({ ...base, ...solveSimplySupportedLinear(span, load.start, load.end, load.wStart, load.wEnd, samples) }, span, left, right, EI);
 }

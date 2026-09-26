@@ -16,10 +16,12 @@ node verify/multi-load-cdp-verify.mjs        # 22 functional checks — M6 load 
 node verify/multi-layout-check.mjs           # 6 layout checks — multi-load configurations
 node verify/profile-cdp-verify.mjs           # 30 functional checks — M7 profiles (presets, table, handles, emit rule)
 node verify/profile-layout-check.mjs         # 8 layout checks — profile configurations incl. 6-point worst case
+node verify/deflection-cdp-verify.mjs        # 15 functional checks — M8 elastic curve (panel, card, E·I control)
+node verify/deflection-layout-check.mjs      # 8 layout checks — four-panel configurations incl. cantilever & tiny E·I
 ```
 
 Each script starts `server.js` itself (no need to run `npm start` first), launches
-headless Edge with a remote-debugging port (9336–9344, one per script) and a throwaway
+headless Edge with a remote-debugging port (9336–9346, one per script) and a throwaway
 user-data dir under `verify/tmp/`, drives the UI, asserts DOM state, and fails on any
 console error. Since M6, the harnesses also strip a `PORT` inherited from the outer
 environment (so an outer tool exporting e.g. `PORT=0` cannot rebind the spawned app
@@ -85,3 +87,20 @@ the asserted values and counts are unchanged.
 - Layout: no clipping / collisions across stepped, snow-drift, gap (6 points),
   6-point staircase, profile + point load, selected vs unselected handles,
   two profiles, and the single-load regression.
+
+## What they assert (deflection pair — M8)
+
+- The **deflected shape panel** draws the elastic curve; the exaggeration
+  note carries the true max deflection in mm and the E·I used; a dot marks
+  the max-sag position.
+- **Hand-derived sags verbatim** (L = 6): default P = 10 @ 3 m → 2.25 mm;
+  full UDL w = 2 → 1.69 mm; cantilever UDL tip → 64.8 mm at EI = 5000.
+- The **E·I control**: preset chips apply and highlight while matching (steel
+  1.8×10⁴, timber 5×10², concrete 1.6×10⁵, default 2×10⁴), the logarithmic
+  slider and the number field drive the same value, and a smaller E·I sags
+  more (1/EI linearity).
+- **E·I persists across load edits**; indeterminate beams show the panel
+  placeholder, drop the card, and hide the E·I control.
+- Layout: no clipping / collisions across all FOUR panels in 8 configurations
+  (default, UDL, cantilever, stepped profile, mixed, long span, tiny E·I,
+  indeterminate).

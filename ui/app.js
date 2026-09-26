@@ -23,7 +23,7 @@
  * screen, label and number therefore stays identical, and no legacy test is
  * edited for M7.
  */
-import { analyzeBeam } from '../src/analysis.js';
+import { analyzeBeam, DEFAULT_EI } from '../src/analysis.js';
 import { MAX_LOADS, MAX_PROFILE_POINTS, emitDescriptor } from '../src/loadmodel.js';
 import { SUPPORTS } from '../src/supportmodel.js';
 import { renderM3, BAND_Y_BASE, BAND_MAX_H } from './renderm3.js';
@@ -34,6 +34,7 @@ const state = {
   loads: [{ type: 'point', magnitude: 10, position: 3 }],
   selectedLoad: 0,             // index into state.loads
   supports: { left: 'pin', right: 'roller' },
+  EI: DEFAULT_EI,              // beam stiffness, kN·m² (M8)
 };
 
 const EDGE_EPS = 1e-3; // min gap so a region keeps a non-zero width
@@ -74,6 +75,7 @@ function analyzeInput() {
     span: state.span,
     loads: state.loads.map(emitDescriptor),
     supports: state.supports,
+    EI: state.EI,
   };
 }
 
@@ -95,7 +97,9 @@ function solveAndRender() {
     return;
   }
   $('validation-msg').hidden = true;
+  lastDeterminate = result.classification.status === 'determinate';
   renderM3(document, state, result);
+  syncSelectedControls(); // determinacy may have flipped → E·I control follows
 }
 
 function clampPosition() {
@@ -376,6 +380,63 @@ function removeLoad(i) {
   rows[Math.min(i, state.loads.length - 1)]?.focus();
 }
 
+// --- E·I (beam stiffness) — M8 ----------------------------------------------
+
+// Teaching presets (plan-m8 §2): round values, not catalogue sections.
+const EI_PRESETS = [
+  { id: 'steel',    label: 'Steel beam ≈ 1.8×10⁴', value: 1.8e4, hint: 'Typical steel beam at educational scale' },
+  { id: 'timber',   label: 'Timber joist ≈ 5×10²', value: 5e2,  hint: 'Typical timber joist — sags visibly more' },
+  { id: 'concrete', label: 'Concrete ≈ 1.6×10⁵',  value: 1.6e5, hint: 'Typical concrete beam — sags less' },
+  { id: 'default',  label: 'Default 2×10⁴',       value: DEFAULT_EI, hint: 'The teaching default (reset)' },
+];
+
+function syncEIInputs() {
+  $('num-ei').value = fmt(state.EI);
+  // Log slider: value = log10(EI); range 2 (10²) … 6.3 (≈ 2×10⁶).
+  $('slider-ei').value = String(Math.log10(state.EI));
+  const tol = state.EI * 0.011; // within ~1% counts as the preset hit
+  for (const b of document.querySelectorAll('#ei-chips .preset-chip')) {
+    const preset = EI_PRESETS.find((p) => p.id === b.dataset.preset);
+    const active = preset != null && Math.abs(preset.value - state.EI) <= tol;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+}
+
+function setEI(v) {
+  const next = Number(v);
+  if (!Number.isFinite(next)) return;
+  state.EI = clamp(next, 1, 1e6);
+  syncEIInputs();
+  solveAndRender();
+}
+
+function bindEI() {
+  const num = $('num-ei');
+  num.addEventListener('input', () => {
+    const v = Number(num.value);
+    if (Number.isFinite(v) && v > 0) setEI(v);
+  });
+  num.addEventListener('blur', () => {
+    syncEIInputs(); // restore the formatted value after a partial edit
+  });
+  $('slider-ei').addEventListener('input', (evt) => {
+    setEI(Math.pow(10, Number(evt.target.value)));
+  });
+  const wrap = $('ei-chips');
+  wrap.replaceChildren(...EI_PRESETS.map((p) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'preset-chip';
+    b.textContent = p.label;
+    b.title = p.hint;
+    b.dataset.preset = p.id;
+    b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', () => setEI(p.value));
+    return b;
+  }));
+}
+
 // Show the editor controls for the SELECTED load's concept, and sync all
 // bound inputs to its (possibly newly selected) values. The editor mirrors
 // the EMITTED kind — no parallel modes:
@@ -396,6 +457,9 @@ function syncSelectedControls() {
   $('ctl-w1').hidden = !dist || isProfileShape;
   $('ctl-w2').hidden = !dist || isProfileShape;
   $('ctl-points').hidden = !dist;
+  // The stiffness control is a BEAM property: visible only when the beam is
+  // determinate (the deflection panel shows a placeholder otherwise).
+  $('ctl-ei').hidden = !isSelectedDeterminate();
   if (dist) {
     syncPointsEditor();
     if (!isProfileShape) {
@@ -407,6 +471,7 @@ function syncSelectedControls() {
     syncInputs();
   }
   updatePresetHighlight();
+  syncEIInputs();
 }
 
 function bindLoadListButtons() {
@@ -428,6 +493,7 @@ function presetPoints(p) {
 
 function applyPreset(p) {
   const s = selected();
+  if (s.type === 'point') return; // chips only apply to distributed loads
   s.points = presetPoints(p);
   clampPoints();
   syncSelectedControls();
@@ -523,6 +589,13 @@ function bindNumberSlider(numId, sliderId, apply, { min, max, step = 0.1, saniti
 }
 
 const getSel = () => selected();
+
+/** Determinacy of the CURRENT beam — cheap, from the last solved state. */
+let lastDeterminate = true;
+
+function isSelectedDeterminate() {
+  return lastDeterminate;
+}
 
 bindNumberSlider('num-span', 'slider-span',
   (v) => { state.span = clamp(v, 1, 20); return state.span; },
@@ -822,6 +895,7 @@ bindPresets();
 populateSupportSelects();
 bindLoadListButtons();
 bindPointsEditor();
+bindEI();
 syncSelectedControls();
 rebuildLoadList();
 makeBeamDraggable(document.getElementById('beam-svg'));

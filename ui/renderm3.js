@@ -74,6 +74,7 @@ const PLOT_W = VB_W - ML - MR;
 const H_BEAM = 268;
 const H_SFD = 234;
 const H_BMD = 270;
+const H_DEFL = 210;
 
 const C = {
   ink: '#1e293b',
@@ -88,6 +89,8 @@ const C = {
   shearFill: 'rgba(37, 99, 235, 0.14)',
   moment: '#ea580c',
   momentFill: 'rgba(234, 88, 12, 0.15)',
+  defl: '#7c3aed',
+  deflFill: 'rgba(124, 58, 237, 0.10)',
   guide: '#94a3b8',
   axis: '#64748b',
   dim: '#475569',
@@ -200,7 +203,9 @@ function drawMomentArrow(svg, x, label) {
     points: `${x + r + 1},${cy} ${x + r - 6},${cy - 6} ${x + r - 4},${cy + 2}`,
     fill: C.reaction,
   }));
-  svg.append(txt(x, cy - r - 10, label, { fill: C.reaction, weight: 700, size: 12.5, halo: true }));
+  // Clamp above the viewBox — the M8 layout audit's cantilever configuration
+  // exposed this pre-existing clip (label baseline 10 put the halo at y < 0).
+  svg.append(txt(x, Math.max(cy - r - 10, 16), label, { fill: C.reaction, weight: 700, size: 12.5, halo: true }));
 }
 
 function drawReactionsM3(svg, result, xm) {
@@ -638,6 +643,57 @@ function renderBDMM3(svg, state, result, xm, determinate) {
   xAxisLabels(svg, xm, result, 264);
 }
 
+function renderDeflectionM3(svg, state, result, xm, determinate) {
+  svg.setAttribute('viewBox', `0 0 ${VB_W} ${H_DEFL}`);
+  svg.replaceChildren();
+  if (!determinate) { placeholder(svg, result); return; }
+
+  const { v, max, EI } = result.deflection;
+  const xA = xm.toPx(0);
+  const xB = xm.toPx(result.input.span);
+
+  // The undeformed centreline (reference) sits mid-panel; the curve is
+  // auto-fit into a fixed drawing band below/around it, with the factor
+  // printed so the exaggeration is never mistaken for true scale.
+  const y0 = 96;                  // undeformed centreline
+  const band = 62;                // drawing band the peak is fitted into
+  const vMaxDraw = Math.max(...v.map((p) => Math.abs(p.v)), 1e-12);
+  const scale = band / vMaxDraw;  // px per metre (the exaggeration)
+  const factor = scale / 1000;    // vs a true-scale mm drawing (mm = m·1000)
+  const yOf = (vv) => y0 + vv * scale; // down-positive v draws BELOW the line
+
+  // Supports: undeformed line + small triangles at the original positions.
+  svg.append(el('line', { x1: xA, y1: y0, x2: xB, y2: y0, stroke: C.guide, 'stroke-width': 1.2, 'stroke-dasharray': '2 3' }));
+  svg.append(el('polygon', { points: `${xA},${y0} ${xA - 9},${y0 + 12} ${xA + 9},${y0 + 12}`, fill: 'none', stroke: C.support, 'stroke-width': 1.5 }));
+  svg.append(el('polygon', { points: `${xB},${y0} ${xB - 9},${y0 + 12} ${xB + 9},${y0 + 12}`, fill: 'none', stroke: C.support, 'stroke-width': 1.5 }));
+
+  // Exaggeration note + true max sag (real text, screen-reader reachable).
+  const mm = max.value * 1000;
+  svg.append(txt(ML, 22, `shape exaggerated ×${fmt(factor)} — true max deflection ${fmt(mm)} mm (${max.sign}) at x = ${fmt(max.position)} m · E·I = ${fmt(EI)} kN·m²`, {
+    anchor: 'start', fill: C.muted, italic: true, size: 11, halo: true,
+  }));
+
+  // The curve (down-positive v plots below the undeformed line).
+  const pts = v.map((p) => `${xm.toPx(p.x)},${yOf(p.v)}`).join(' ');
+  svg.append(el('polygon', { points: `${xA},${y0} ${pts} ${xB},${y0}`, fill: C.deflFill, stroke: 'none' }));
+  svg.append(el('polyline', { points: pts, fill: 'none', stroke: C.defl, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+
+  // Max-sag marker (same dot style as the BMD peak).
+  const maxX = xm.toPx(max.position);
+  const maxY = yOf(max.sign === 'down' ? max.value : -max.value);
+  svg.append(el('circle', { cx: maxX, cy: maxY, r: 4.5, fill: C.defl, stroke: '#ffffff', 'stroke-width': 1.5 }));
+  svg.append(el('line', { x1: maxX, y1: y0, x2: maxX, y2: maxY, stroke: C.defl, 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
+  svg.append(txt(maxX + (maxX < VB_W - MR - 120 ? 10 : -10), maxY + (max.sign === 'down' ? -8 : 16),
+    `vmax = ${fmt(mm)} mm`, { anchor: maxX < VB_W - MR - 120 ? 'start' : 'end', fill: C.defl, weight: 700, size: 12, halo: true }));
+
+  // x-axis ticks: 0 and L only (the curve is qualitative; numbers above).
+  const tick = (x) => svg.append(el('line', { x1: x, y1: y0 + 16, x2: x, y2: y0 + 24, stroke: C.axis, 'stroke-width': 1.2 }));
+  tick(xA);
+  tick(xB);
+  svg.append(txt(xA, y0 + 38, '0', { anchor: 'start', fill: C.muted, size: 11.5, halo: true }));
+  svg.append(txt(xB, y0 + 38, `L = ${fmt(result.input.span)} m`, { anchor: 'end', fill: C.muted, size: 11.5, halo: true }));
+}
+
 function placeholder(svg, result) {
   const msg = result.classification.status === 'indeterminate'
     ? 'Statically indeterminate — not solved here (see note above)'
@@ -706,6 +762,11 @@ function renderResultCards(doc, state, result) {
       sub: `${result.maxMoment.sign} · at x = ${fmt(result.maxMoment.position)} m`,
       accent: true,
     });
+    cards.push({
+      label: 'Max deflection',
+      value: `${fmt(result.deflection.max.value * 1000)} mm`,
+      sub: `${result.deflection.max.sign} · at x = ${fmt(result.deflection.max.position)} m · E·I = ${fmt(result.deflection.EI)} kN·m²`,
+    });
   } else {
     cards.push({ label: 'Reactions', value: '–', sub: 'not solved by statics' });
     cards.push({ label: 'Max bending moment', value: '–', sub: 'not solved by statics' });
@@ -744,4 +805,9 @@ export function renderM3(doc, state, result) {
   renderBeamM3(doc.getElementById('beam-svg'), state, result, xm);
   renderSFDM3(doc.getElementById('sfd-svg'), state, result, xm, determinate);
   renderBDMM3(doc.getElementById('bmd-svg'), state, result, xm, determinate);
+  // The deflection panel (M8) is optional in the DOM contract: present in
+  // index.html and in every M8-era fixture; renderM3 stays usable with
+  // minimal/older fixtures (pre-M8 test shims) that omit it.
+  const deflSvg = doc.getElementById('defl-svg');
+  if (deflSvg) renderDeflectionM3(deflSvg, state, result, xm, determinate);
 }

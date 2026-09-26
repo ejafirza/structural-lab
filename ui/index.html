@@ -67,6 +67,17 @@
           <input id="slider-pos" class="slider" type="range" min="0" step="0.01" aria-label="Load position from left end, in metres" />
           <p class="hint">…or drag the load arrow on the beam ↔</p>
         </div>
+        <div class="ctl" id="ctl-ei">
+          <label for="num-ei">Beam stiffness E·I</label>
+          <div class="ctl-row">
+            <input id="num-ei" type="number" min="1" max="1000000" step="10" inputmode="decimal" />
+            <span class="unit">kN·m²</span>
+          </div>
+          <input id="slider-ei" class="slider" type="range" min="2" max="6.3" step="0.01" aria-label="Beam stiffness E times I, on a logarithmic scale, in kilonewton metres squared" />
+          <span class="ctl-label" id="ei-presets-label">Stiffness presets</span>
+          <div class="preset-chips" id="ei-chips" role="group" aria-labelledby="ei-presets-label"></div>
+          <p class="hint">How stiff the beam is — bigger E·I, smaller sag.</p>
+        </div>
         <div class="ctl" id="ctl-presets" hidden>
           <span class="ctl-label" id="presets-label">Presets</span>
           <div class="preset-chips" id="preset-chips" role="group" aria-labelledby="presets-label"></div>
@@ -141,6 +152,13 @@
       <h2>Bending moment M(x) <span class="panel-sub">kNm · tension side: sagging (+) below, hogging (−) above</span></h2>
       <svg id="bmd-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img"
            aria-label="Bending moment diagram"></svg>
+    </section>
+
+    <!-- ============================ DEFLECTION ============================ -->
+    <section class="panel" aria-label="Deflected shape">
+      <h2>Deflected shape v(x) <span class="panel-sub">shape exaggerated for visibility — the true scale is printed on the drawing</span></h2>
+      <svg id="defl-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img"
+           aria-label="Deflected shape of the beam centreline (elastic curve), drawn exaggerated"></svg>
     </section>
 
     <footer class="foot">

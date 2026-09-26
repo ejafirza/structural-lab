@@ -240,6 +240,9 @@ test('app.js: point table wiring, add/remove/cap, emit rule, profile drag and ke
     'num-span', 'slider-span', 'load-status', 'preset-chips', 'load-list',
     'load-count', 'btn-add-point', 'btn-add-distributed',
     'sel-support-left', 'sel-support-right',
+    // M8 fixture nodes (E·I control + deflection panel svg) — fixture only;
+    // no M7-era assertion in this file is touched.
+    'ctl-ei', 'num-ei', 'slider-ei', 'ei-chips', 'defl-svg',
   ];
   const doc = makeFakeDoc(ids);
 
