@@ -464,8 +464,8 @@ function syncSelectedControls() {
   $('ctl-w1').hidden = !dist || isProfileShape;
   $('ctl-w2').hidden = !dist || isProfileShape;
   $('ctl-points').hidden = !dist;
-  // The stiffness control is a BEAM property: visible only when the beam is
-  // determinate (the deflection panel shows a placeholder otherwise).
+  // Stiffness belongs to the beam, not the selected load. Hide it only when
+  // statics cannot determine the deflection (the panel then shows a placeholder).
   $('ctl-ei').hidden = !isSelectedDeterminate();
   if (dist) {
     syncPointsEditor();
@@ -917,7 +917,7 @@ function initTeaching() {
     getSteps: (label) => {
       if (!lastResult || lastResult.classification.status !== 'determinate') return [];
       const g = groupForCard(lastResult, label);
-      return g ? [g] : [];
+      return g ?? null;
     },
   });
 }

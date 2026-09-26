@@ -72,7 +72,6 @@ function makeFakeDoc(extraIds = []) {
     querySelector: () => null,
     querySelectorAll: () => [],
   };
-  doc._byId = byId;
   return doc;
 }
 
@@ -140,7 +139,7 @@ test('indeterminate and unstable: placeholder in the deflection panel, no deflec
 
 // --- app.js E·I wiring against the fake DOM ---------------------------------
 
-test('app.js: E·I chips set the value, highlight while matching, log-slider drives EI, control hides when indeterminate', async () => {
+test('app.js: E·I belongs to the beam, stays visible for point/distributed loads, and hides when indeterminate', async () => {
   const ids = [
     'slider-pos', 'validation-msg', 'ctl-load', 'ctl-pos', 'ctl-presets',
     'ctl-region-start', 'ctl-region-end', 'ctl-w1', 'ctl-w2', 'ctl-points',
@@ -172,7 +171,7 @@ test('app.js: E·I chips set the value, highlight while matching, log-slider dri
   globalThis.document = doc;
   await import('../ui/app.js');
 
-  // Default: control visible (default beam is determinate), EI = DEFAULT_EI.
+  // Default point-load beam: the beam-level control is visible and uses DEFAULT_EI.
   assert.equal(doc.getElementById('ctl-ei').hidden, false);
   assert.equal(doc.getElementById('num-ei').value, fmt(DEFAULT_EI));
 
@@ -194,6 +193,12 @@ test('app.js: E·I chips set the value, highlight while matching, log-slider dri
   slider.value = '4';
   slider.dispatchEvent({ type: 'input', target: slider });
   assert.equal(doc.getElementById('num-ei').value, fmt(1e4));
+
+  assert.equal(doc.getElementById('ctl-ei').hidden, false);
+  doc.getElementById('btn-add-distributed').dispatchEvent({ type: 'click' });
+  assert.equal(doc.getElementById('ctl-ei').hidden, false, 'stiffness stays visible for distributed loads');
+  doc.getElementById('btn-add-point').dispatchEvent({ type: 'click' });
+  assert.equal(doc.getElementById('ctl-ei').hidden, false, 'stiffness stays visible for point loads');
 
   // Half the stiffness → double the sag, live (engine re-solve through app).
   const sagBefore = doc.getElementById('result-cards')

@@ -1,270 +1,395 @@
 /**
- * explain.js — worked derivations over a FINISHED analyzeBeam result (M9).
- * -------------------------------------------------------------
- * The engine computes; this file only FORMATS what the engine already found.
- * Every step's `value` is read from the result object (reactions, maxMoment,
- * equilibrium, deflection, the sampled diagrams) — never recomputed by a
- * parallel formula. test/explain.test.js enforces the identity: each step's
- * value is identical to the engine field it quotes, and the closed-form
- * builders produce exactly the numbers the analytical suites already pinned.
- *
- * A step: { formula, substitution, value, unit }. A group: { title, steps }.
- * `derivationGroups(result)` returns the groups available for a result —
- * for determinate beams the full set; for indeterminate/unstable beams only
- * the classification explanation (honesty rule: no invented numbers).
+ * explain.js — readable worked explanations over a FINISHED engine result.
+ * The interface formats these steps; it never solves the beam again. Values
+ * shown as answers come directly from `analyzeBeam` (apart from the explicit
+ * metres-to-millimetres display conversion for deflection).
  */
 
-// --- tiny formatting helpers (presentation only) -----------------------------
+const n3 = (value) => String(Number(value.toPrecision(3)));
+const resultStep = (title, explanation, equation, substitution, value, unit, final = false) => ({
+  title, explanation, equation, substitution, value, unit, final,
+});
+const group = (title, intro, given, steps) => ({ title, intro, given, steps });
 
-const n3 = (v) => String(Number(v.toPrecision(3)));
-
-function step(formula, substitution, value, unit) {
-  return { formula, substitution, value, unit };
+function inputSummary(result) {
+  const { input } = result;
+  const loads = input.loads.map((load, index) => {
+    if (load.type === 'point') return `${index + 1}: P = ${n3(load.magnitude)} kN at x = ${n3(load.position)} m`;
+    if (load.type === 'udl') return `${index + 1}: w = ${n3(load.intensity)} kN/m over 0–${n3(input.span)} m`;
+    if (load.type === 'linear') return `${index + 1}: w = ${n3(load.wStart)} to ${n3(load.wEnd)} kN/m over x = ${n3(load.start)}–${n3(load.end)} m`;
+    const points = load.points.map((point) => `(${n3(point.x)} m, ${n3(point.w)} kN/m)`);
+    return `${index + 1}: profile points (x, w) = ${points.join('; ')}`;
+  });
+  return [`Span L = ${n3(input.span)} m`, `Support A: ${input.supports.left}`, `Support B: ${input.supports.right}`, ...loads];
 }
 
-/**
- * Sub-steps for ONE load's resultant, using only descriptor geometry and the
- * result's published combined resultant. For a SINGLE load the per-load Rᵢ
- * steps are shown with their closed-form values — the same forms the engine
- * documents and the analytical suites pin (the lone-load case is exactly the
- * frozen M1/M4/M5 result, so the identity rule holds). For MIXED loads the
- * per-load resultants are described in prose only: the engine publishes the
- * COMBINED (R, x̄), and explain.js never recomputes a value the result does
- * not carry.
- */
-function resultantSteps(load, lone) {
-  const out = [];
-  if (load.type === 'point') {
-    if (lone) {
-      out.push(step('R = P (a point load is its own resultant)', `P = ${n3(load.magnitude)}`, load.magnitude, 'kN'));
-      out.push(step('x̄ = a (acts at the load)', `a = ${n3(load.position)} m`, load.position, 'm'));
-    } else {
-      out.push(step('Point load: R = P, acting at its position a', 'its own resultant', null, ''));
-    }
-  } else if (load.type === 'udl') {
-    const b = load.end - load.start;
-    if (lone) {
-      out.push(step('R = w·b (area of the band)', `${n3(load.intensity)} × ${n3(b)}`, load.intensity * b, 'kN'));
-      out.push(step('x̄ = (start + end)/2 — uniform band, centroid at the middle', `x̄ = ${n3((load.start + load.end) / 2)} m`, (load.start + load.end) / 2, 'm'));
-    } else {
-      out.push(step('Distributed band: R = its area (w × b), acting at the band midpoint', 'area × centroid', null, ''));
-    }
-  } else if (load.type === 'linear') {
-    const b = load.end - load.start;
-    if (lone) {
-      const R = ((load.wStart + load.wEnd) * b) / 2;
-      const xbar = load.wStart + load.wEnd > 0
-        ? load.start + (b * (load.wStart + 2 * load.wEnd)) / (3 * (load.wStart + load.wEnd))
-        : load.start;
-      out.push(step('R = (w₁ + w₂)·b/2 (trapezoid area)', `(${n3(load.wStart)} + ${n3(load.wEnd)}) × ${n3(b)} / 2`, R, 'kN'));
-      out.push(step('x̄ = x₁ + b·(w₁ + 2w₂)/(3·(w₁ + w₂))', `x̄ = ${n3(xbar)} m`, xbar, 'm'));
-    } else {
-      out.push(step('Trapezoid band: R = (w₁ + w₂)·b/2 at its centroid', 'the M5 closed forms, per load', null, ''));
-    }
-  } else if (load.type === 'profile') {
-    if (lone) {
-      let R = 0;
-      let Mx = 0;
-      const pts = load.points;
-      for (let i = 1; i < pts.length; i++) {
-        const b = pts[i].x - pts[i - 1].x;
-        const Ri = ((pts[i - 1].w + pts[i].w) * b) / 2;
-        const xbi = pts[i - 1].x + (b * (pts[i - 1].w + 2 * pts[i].w)) / (3 * (pts[i - 1].w + pts[i].w));
-        R += Ri;
-        Mx += Ri * xbi;
-      }
-      out.push(step('R = Σ Rᵢ (sum of per-segment trapezoid areas)', 'segment by segment', R, 'kN'));
-      out.push(step('x̄ = ΣRᵢx̄ᵢ / R (weighted segment centroids)', `x̄ = ${n3(R > 0 ? Mx / R : 0)} m`, R > 0 ? Mx / R : 0, 'm'));
-    } else {
-      out.push(step('Profile band: R = the sum of its per-segment areas', 'per-segment summation', null, ''));
-    }
+function givenInputs(result) {
+  const { loads, supports } = result.input;
+  const cantilever = supports.left === 'fixed' || supports.right === 'fixed';
+  const needsExplicitInputs = loads.length > 1
+    || loads.some((load) => load.type === 'linear' || load.type === 'profile')
+    || cantilever
+    || (loads[0]?.type === 'point'
+      && Math.abs(loads[0].position - result.input.span / 2) > 1e-9);
+  return needsExplicitInputs ? inputSummary(result) : [];
+}
+
+function isFullSpanUniform(load, span) {
+  return load?.type === 'udl'
+    || (load?.type === 'linear'
+      && load.start === 0
+      && load.end === span
+      && load.wStart === load.wEnd);
+}
+
+function uniformIntensity(load) {
+  return load.type === 'udl' ? load.intensity : load.wStart;
+}
+
+function cantileverSupports(supports) {
+  return supports.left === 'fixed' || supports.right === 'fixed';
+}
+
+function pointLoadDistanceFromFixedEnd(load, supports, span) {
+  return supports.left === 'fixed' ? load.position : span - load.position;
+}
+
+function substitutionStep(substitution) {
+  return resultStep(
+    'Substitute the given values',
+    'Insert the beam’s stated values into the case equation.',
+    '', substitution, null, '', false,
+  );
+}
+
+function momentSignStep(maxMoment) {
+  return resultStep(
+    'Read the moment sign',
+    maxMoment.sign === 'hogging'
+      ? 'Hogging is drawn above the axis; the beam’s top face is in tension.'
+      : 'Sagging is drawn below the axis; the beam’s bottom face is in tension.',
+    '', '', null, '', false,
+  );
+}
+
+function engineMomentResult(result) {
+  return resultStep(
+    'Report the engine result',
+    'This is the maximum moment reported by the analysis.',
+    'Mmax', `Sign: ${result.maxMoment.sign}; position x = ${n3(result.maxMoment.position)} m`,
+    result.maxMoment.value, 'kNm', true,
+  );
+}
+
+function engineDeflectionStep(max) {
+  return resultStep(
+    'Report the engine result',
+    'Deflection is down-positive in this lab; the drawing is enlarged and gives the true value in its note.',
+    'Maximum deflection in millimetres',
+    `Engine maximum = ${n3(max.value)} m × 1000 mm/m; position x = ${n3(max.position)} m`,
+    max.value * 1000, 'mm', true,
+  );
+}
+
+function deflectionMethod(load, input, EI) {
+  const { span, supports } = input;
+  const cantilever = cantileverSupports(supports);
+  if (load?.type === 'point' && !cantilever && Math.abs(load.position - span / 2) < 1e-9) {
+    return {
+      formula: 'vmax = P·L³ / (48·E·I)',
+      explanation: 'Simply supported beam with a point load at midspan.',
+      substitution: `vmax = ${n3(load.magnitude)} × ${n3(span)}³ / (48 × ${n3(EI)}) m`,
+    };
   }
-  return out;
+  if (load?.type === 'point' && cantilever) {
+    const distance = pointLoadDistanceFromFixedEnd(load, supports, span);
+    return {
+      formula: 'vtip = P·d²·(3L − d) / (6·E·I)',
+      explanation: 'For a cantilever with a point load, the greatest deflection is at the free tip; d is measured from the fixed end.',
+      substitution: `vtip = ${n3(load.magnitude)} × ${n3(distance)}² × (3 × ${n3(span)} − ${n3(distance)}) / (6 × ${n3(EI)}) m`,
+    };
+  }
+  if (isFullSpanUniform(load, span)) {
+    return {
+      formula: cantilever ? 'vtip = w·L⁴ / (8·E·I)' : 'vmax = 5·w·L⁴ / (384·E·I)',
+      explanation: cantilever
+        ? 'Cantilever with a uniform load over the span.'
+        : 'Simply supported beam with a uniform load over the full span.',
+      substitution: cantilever
+        ? `vtip = ${n3(uniformIntensity(load))} × ${n3(span)}⁴ / (8 × ${n3(EI)}) m`
+        : `vmax = 5 × ${n3(uniformIntensity(load))} × ${n3(span)}⁴ / (384 × ${n3(EI)}) m`,
+    };
+  }
+  return {
+    formula: 'E·I·v″(x) = −M(x)',
+    explanation: 'The engine integrates the exact moment function twice and applies the support conditions. The greatest deflection is where the slope θ(x*) = 0; the engine locates that point from the integrated curve.',
+    substitution: '',
+  };
 }
-
-// --- classification (the only group for unsolved beams) ----------------------
 
 function classificationGroups(result) {
-  const cls = result.classification;
-  const unknowns = cls.unknowns;
-  const eq = 3;
-  const g = [{
-    title: 'Why this beam is not solved here',
-    steps: [
-      step('Reaction unknowns R from the supports', `R = ${unknowns}`, unknowns, ''),
-      step('Independent equilibrium equations', 'ΣFx, ΣFy, ΣM = 3', eq, ''),
-    ],
-  }];
-  if (cls.status === 'indeterminate') {
-    g[0].steps.push(step('Degree of indeterminacy', `R − 3 = ${unknowns} − 3`, cls.degree, ''));
-    g.push({
-      title: 'What that means',
-      steps: [
-        step('Statics alone cannot find the reactions', 'more unknowns than equations', null, ''),
-        step('The answer depends on the beam\u2019s stiffness E·I', 'material and section matter', null, ''),
-      ],
-    });
-  } else {
-    g.push({
-      title: 'What that means',
-      steps: [
-        step('The beam can still move', `unrestrained: ${cls.unconstrained.join(', ') || 'rotation'}`, null, ''),
-        step('A mechanism is not a structure', 'no solution exists', null, ''),
-      ],
-    });
+  if (!result?.classification) {
+    return [group('Explanation unavailable', 'A solved beam result is not available yet.', [], [])];
   }
-  return g;
+  const cls = result.classification;
+  const steps = [resultStep(
+    'Count the support reactions',
+    'Each restrained motion contributes one unknown reaction.',
+    'R = reaction unknowns', `R = ${cls.unknowns}`, cls.unknowns, 'unknowns',
+  ), resultStep(
+    'Compare with the three statics equations',
+    'A planar beam has horizontal-force, vertical-force, and moment equilibrium.',
+    'ΣFx = 0,  ΣFy = 0,  ΣM = 0', '3 independent equations', 3, 'equations',
+  )];
+  if (cls.status === 'indeterminate') {
+    steps.push(resultStep(
+      'There are more unknowns than equations',
+      'Statics alone cannot determine every reaction. Material and section stiffness would also be needed.',
+      'Degree = R − 3', `${cls.unknowns} − 3`, cls.degree, 'degree', true,
+    ));
+    return [group('Why this beam is not solved here', 'The support arrangement is statically indeterminate.', inputSummary(result), steps)];
+  }
+  steps.push(resultStep(
+    'The support arrangement leaves motion free',
+    `Unrestrained motion: ${cls.unconstrained.join(', ') || 'rotation'}. This arrangement is a mechanism, not a stable beam model.`,
+    '', '', null, '', true,
+  ));
+  return [group('Why this beam is not solved here', 'The support arrangement is unstable.', inputSummary(result), steps)];
 }
 
-// --- determinate groups --------------------------------------------------------
-
-function reactionsGroup(result) {
-  const { reactions, input } = result;
-  const L = input.span;
-  const left = reactions.left;
-  const right = reactions.right;
-  void L;
-
-  if (left.type === 'fixed' || right.type === 'fixed') {
-    // Cantilever: the wall carries the whole resultant.
-    const wall = left.type === 'fixed' ? left : right;
-    const Mz = wall.Mz;
-    const steps = [];
-    steps.push(step('ΣFy = 0 → the wall carries the total load', `V_wall = R`, wall.Vy, 'kN'));
-    steps.push(step('ΣM at the wall = 0 → the wall moment balances the load', 'M_wall = R·x̄ (hogging)', Mz, 'kNm'));
-    return { title: 'How the reactions were found (cantilever)', steps };
-  }
-
+function reactionsGroup(result, label = 'Reaction VA') {
+  const side = label.endsWith('B') ? 'right' : 'left';
+  const letter = side === 'left' ? 'A' : 'B';
+  const component = label.slice('Reaction '.length, -1);
+  const support = result.reactions[side];
+  const value = support?.[{ H: 'Hx', V: 'Vy', M: 'Mz' }[component]];
+  const unit = component === 'M' ? 'kNm' : 'kN';
+  const { input } = result;
+  const only = input.loads.length === 1 ? input.loads[0] : null;
+  const simpleCase = only?.type === 'point' || isFullSpanUniform(only, input.span);
   const steps = [];
-  const lone = input.loads.length === 1;
-  for (const load of input.loads) steps.push(...resultantSteps(load, lone));
-  if (!lone) {
-    steps.push(step('The combined resultant R, x̄ = the superposition of every load\u2019s (Rᵢ, x̄ᵢ)', 'R = ΣRᵢ, x̄ = weighted average', result.resultant.value, 'kN'));
-    steps.push(step('Combined centroid', `x̄ = ${n3(result.resultant.position)} m`, result.resultant.position, 'm'));
+
+  if (component === 'H') {
+    steps.push(resultStep(
+      'Balance horizontal forces',
+      'The model contains vertical loads only, so no horizontal reaction is required.',
+      'ΣFx = 0  →  H' + letter + ' = 0', 'No horizontal applied load', value, unit, true,
+    ));
+  } else if (support.type === 'fixed' && component === 'V') {
+    const point = only?.type === 'point';
+    const uniform = isFullSpanUniform(only, input.span);
+    const equation = point ? 'ΣFy = 0  →  Vwall = P' : uniform ? 'ΣFy = 0  →  Vwall = w·L' : 'ΣFy = 0  →  Vwall = R';
+    steps.push(resultStep(
+      'Balance vertical forces',
+      'The fixed end carries the beam’s total downward load.',
+      equation, '', null, '', false,
+    ));
+    if (simpleCase) {
+      const substitution = point
+        ? `Vwall = ${n3(only.magnitude)} kN`
+        : `Vwall = ${n3(uniformIntensity(only))} × ${n3(input.span)} kN`;
+      steps.push(substitutionStep(substitution));
+    }
+  } else if (support.type === 'fixed' && component === 'M') {
+    const point = only?.type === 'point';
+    const uniform = isFullSpanUniform(only, input.span);
+    const equation = point ? 'ΣMwall = 0  →  Mwall = P·d'
+      : uniform ? 'ΣMwall = 0  →  Mwall = w·L² / 2' : 'ΣMwall = 0';
+    const substitution = point
+      ? `M${letter} = ${n3(only.magnitude)} × ${n3(pointLoadDistanceFromFixedEnd(only, input.supports, input.span))} kNm`
+      : uniform ? `M${letter} = ${n3(uniformIntensity(only))} × ${n3(input.span)}² / 2 kNm` : `Engine support moment M${letter} = ${n3(value)} kNm`;
+    if (point || uniform) {
+      steps.push(resultStep(
+        'Balance moments at the fixed end',
+        'The fixed-end reaction moment balances the total applied moment about the wall.',
+        equation, '', null, '', false,
+      ));
+      steps.push(substitutionStep(substitution));
+      steps.push(resultStep('Report the engine result', 'This support moment is reported by the analysis.', `M${letter}`, substitution, value, unit, true));
+    } else {
+      steps.push(resultStep(
+        'Balance moments at the fixed end',
+        'The fixed-end reaction moment balances the total applied moment about the wall.',
+        equation, substitution, value, unit, true,
+      ));
+    }
+  } else if (component === 'V' && side === 'right') {
+    const point = only?.type === 'point';
+    const uniform = isFullSpanUniform(only, input.span);
+    const equation = point ? 'ΣMA = 0  →  RB = P·a / L'
+      : uniform ? 'ΣMA = 0  →  RB = w·L / 2' : 'ΣMA = 0  →  RB = R·x̄ / L';
+    steps.push(resultStep(
+      'Take moments about A',
+      'The support reaction at B balances the moment of the combined load resultant about A.',
+      equation, '', null, '', false,
+    ));
+    if (point) {
+      steps.push(substitutionStep(`RB = ${n3(only.magnitude)} × ${n3(only.position)} / ${n3(input.span)} kN`));
+    } else if (uniform) {
+      steps.push(substitutionStep(`RB = ${n3(uniformIntensity(only))} × ${n3(input.span)} / 2 kN`));
+    }
+  } else {
+    const point = only?.type === 'point';
+    const uniform = isFullSpanUniform(only, input.span);
+    const b = input.b ?? input.span - (only?.position ?? 0);
+    const equation = point ? 'ΣMA = 0  →  RA = P·b / L'
+      : uniform ? 'ΣMA = 0  →  RA = w·L / 2' : 'ΣFy = 0  →  RA = R − RB';
+    steps.push(resultStep(
+      'Balance moments about A, then vertical forces',
+      'The left reaction balances the total downward load and the right support reaction.',
+      equation, '', null, '', false,
+    ));
+    if (point) {
+      steps.push(substitutionStep(`RA = ${n3(only.magnitude)} × ${n3(b)} / ${n3(input.span)} kN`));
+    } else if (uniform) {
+      steps.push(substitutionStep(`RA = ${n3(uniformIntensity(only))} × ${n3(input.span)} / 2 kN`));
+    }
   }
-  steps.push(step('ΣM about A = 0 → R_B = R·x̄ / L', '', right.Vy, 'kN'));
-  steps.push(step('ΣFy = 0 → R_A = R − R_B', '', left.Vy, 'kN'));
-  return { title: 'How the reactions were found (statics)', steps };
+
+  if (component !== 'H') {
+    steps.push(resultStep(
+      'Report the engine result',
+      'This reaction is reported by the analysis; the explanation does not solve the beam again.',
+      `${component}${letter}`,
+      `${component}${letter} = ${n3(value)} ${unit}`,
+      value, unit, true,
+    ));
+  }
+  return group(`How reaction ${component}${letter} was found`, `The answer is the ${component === 'M' ? 'support moment' : `${component === 'H' ? 'horizontal' : 'vertical'} reaction`} at ${letter}.`, givenInputs(result), steps);
 }
 
 function shearGroup(result) {
-  const { diagrams, reactions, input } = result;
-  const shear = diagrams.shear;
-  const L = input.span;
-  const V0 = shear[0].V;
-  const VL = shear[shear.length - 1].V;
-  const steps = [
-    step('V starts at the left reaction (just right of A)', 'V(0⁺) = R_A', V0, 'kN'),
-  ];
-  const pointLoads = input.loads.filter((l) => l.type === 'point');
-  if (pointLoads.length === 1 && input.loads.length === 1) {
-    steps.push(step('Point load: V jumps vertically by exactly P under the load', `ΔV = −P, with P = ${n3(pointLoads[0].magnitude)} kN`, null, ''));
-  } else if (pointLoads.length > 0) {
-    steps.push(step('Every point load drops V by its own P (a vertical jump each)', `${pointLoads.length} jump(s) on the diagram`, null, ''));
-  } else {
-    steps.push(step('Distributed loads kink V gradually (dV/dx = −w)', 'no jump — the load is spread', null, ''));
-  }
-  steps.push(step('V ends at −R_B (just left of B) — the diagram closes', 'V(L⁻) = −R_B', VL, 'kN'));
-  const vmax = Math.max(Math.abs(V0), Math.abs(VL));
-  steps.push(step('Vmax = the larger |V| at the two ends (single span, downward loads)', `max(${n3(Math.abs(V0))}, ${n3(Math.abs(VL))})`, vmax, 'kN'));
-  void L;
-  void reactions;
-  return { title: 'How the shear diagram was read', steps };
+  const shear = result.diagrams.shear;
+  const start = shear[0].V;
+  const end = shear[shear.length - 1].V;
+  const hasPoints = result.input.loads.some((load) => load.type === 'point');
+  const leftSupport = result.reactions.left;
+  const rightSupport = result.reactions.right;
+  const behavior = hasPoints
+    ? 'Each point load creates a downward jump in shear equal to its load.'
+    : 'Distributed load changes shear continuously; its slope is −w.';
+  const leftExplanation = leftSupport.type === 'free'
+    ? 'The one-sided value is read from the solved diagram; the left end has no support reaction.'
+    : 'Immediately to the right of the left support, shear equals its vertical reaction.';
+  const rightExplanation = rightSupport.type === 'free'
+    ? 'Read the one-sided shear value from the solved diagram; the right end has no support reaction.'
+    : 'Immediately to the left of the right support, shear balances its vertical reaction.';
+  return group('How to read the shear diagram', 'Shear tracks the internal vertical force along the beam.', givenInputs(result), [
+    resultStep('Read the left end', leftExplanation, 'V(0⁺)', '', start, 'kN'),
+    resultStep('Follow the applied loads', behavior, hasPoints ? 'ΔV = −P' : 'dV/dx = −w', '', null, ''),
+    resultStep('Read the right end', rightExplanation, 'V(L⁻)', '', end, 'kN', true),
+  ]);
 }
 
 function momentGroup(result) {
-  const { maxMoment } = result;
-  const loads = result.input.loads;
-  const L = result.input.span;
+  const { input, maxMoment } = result;
+  const loads = input.loads;
+  const only = loads.length === 1 ? loads[0] : null;
+  const fixedSide = input.supports.left === 'fixed' ? 'left' : input.supports.right === 'fixed' ? 'right' : null;
   const steps = [];
-  steps.push(step('M peaks where the shear V crosses zero (dM/dx = V)', 'the engine checks every candidate exactly', maxMoment.position, 'm'));
-  const first = loads[0];
-  if (loads.length === 1 && first.type === 'point') {
-    const a = first.position;
-    const b = L - a;
-    steps.push(step('Point load: Mmax = P·a·b / L (closed form)', `P·a·b/L with P = ${n3(first.magnitude)}, a = ${n3(a)}, b = ${n3(b)}`, maxMoment.value, 'kNm'));
-  } else if (loads.length === 1 && first.type === 'udl') {
-    steps.push(step('Full-span UDL: Mmax = w·L² / 8 (closed form)', `w·L²/8 with w = ${n3(first.intensity)}`, maxMoment.value, 'kNm'));
-  } else if (loads.length === 1 && first.type === 'linear') {
-    steps.push(step('Trapezoid: Mmax from the exact V = 0 root inside the region', 'quadratic formula, exact', maxMoment.value, 'kNm'));
-  } else if (maxMoment.sign === 'hogging') {
-    steps.push(step('Cantilever: Mmax is the wall moment R·x̄ (hogging)', 'at the fixed end', maxMoment.value, 'kNm'));
+  let intro = 'The maximum is taken from the engine’s bending-moment solution.';
+  if (fixedSide) {
+    if (only?.type === 'point') {
+      const distance = pointLoadDistanceFromFixedEnd(only, input.supports, input.span);
+      steps.push(resultStep(
+        'Use the cantilever point-load moment equation',
+        'The largest bending-moment magnitude occurs at the fixed end; d is measured from that wall.',
+        'Mmax = P·d', '', null, '', false,
+      ));
+      steps.push(substitutionStep(`Mmax = ${n3(only.magnitude)} × ${n3(distance)} kNm`));
+    } else if (isFullSpanUniform(only, input.span)) {
+      const intensity = uniformIntensity(only);
+      steps.push(resultStep(
+        'Use the cantilever full-span uniform-load equation',
+        'The largest bending-moment magnitude occurs at the fixed end.',
+        'Mmax = w·L² / 2', '', null, '', false,
+      ));
+      steps.push(substitutionStep(`Mmax = ${n3(intensity)} × ${n3(input.span)}² / 2 kNm`));
+    } else {
+      steps.push(resultStep(
+        'For a cantilever, check the fixed wall',
+        'The largest bending-moment magnitude occurs at the fixed end.',
+        'Mmax = |Mwall|', '', null, '', false,
+      ));
+    }
+    intro = 'A cantilever’s peak moment is at its fixed wall.';
   } else {
-    steps.push(step('Mixed loads: Mmax over the combined diagram', 'superposition, exact per segment', maxMoment.value, 'kNm'));
+    if (only?.type === 'point') {
+      const b = input.b ?? input.span - only.position;
+      steps.push(resultStep(
+        'Use the point-load bending-moment equation',
+        'For a simply supported beam, the peak is directly under the point load.',
+        'Mmax = P·a·b / L', '', null, '', false,
+      ));
+      steps.push(substitutionStep(`Mmax = ${n3(only.magnitude)} × ${n3(only.position)} × ${n3(b)} / ${n3(input.span)} kNm`));
+      intro = 'This is the peak moment for the point load shown on the beam.';
+    } else if (isFullSpanUniform(only, input.span)) {
+      const intensity = uniformIntensity(only);
+      steps.push(resultStep(
+        'Use the full-span uniform-load equation',
+        'The peak is at midspan for a simply supported beam with a full-span uniform load.',
+        'Mmax = w·L² / 8', '', null, '', false,
+      ));
+      steps.push(substitutionStep(`Mmax = ${n3(intensity)} × ${n3(input.span)}² / 8 kNm`));
+      intro = 'This is the peak moment for the uniform load shown on the beam.';
+    } else {
+      steps.push(resultStep(
+        'Check peak candidates',
+        'Because dM/dx = V, an interior peak can occur where V(x*) = 0. The engine checks exact roots within each load segment and also checks load-event boundaries.',
+        'Candidates: V(x*) = 0 or a load-event boundary', '', null, '', false,
+      ));
+      intro = 'The peak for this load shape comes from the combined bending-moment diagram.';
+    }
   }
-  steps.push(step(maxMoment.sign === 'hogging' ? 'Hogging — tension on top, drawn above the axis' : 'Sagging — tension on the bottom, drawn below the axis', 'the BMD is drawn on the tension side', maxMoment.value, 'kNm'));
-  return { title: 'How the maximum moment was found', steps };
+  steps.push(momentSignStep(maxMoment));
+  steps.push(engineMomentResult(result));
+  return group('How the maximum bending moment was found', intro, givenInputs(result), steps);
 }
 
 function deflectionGroup(result) {
-  const d = result.deflection;
-  const { max, EI } = d;
-  const loads = result.input.loads;
-  const L = result.input.span;
-  const steps = [];
-  const mm = max.value * 1000;
-
-  const kind = loads.length === 1 ? loads[0].type : 'mixed';
-  const left = result.input.supports.left;
-  const right = result.input.supports.right;
-  const cantilever = left === 'fixed' || right === 'fixed';
-
-  if (kind === 'point' && !cantilever) {
-    steps.push(step('Simply supported, point load: v_max = P·L³ / (48·E·I) at midspan', `P·L³/(48·E·I), P = ${n3(loads[0].magnitude)}`, max.value, 'm'));
-  } else if (kind === 'point' && cantilever) {
-    steps.push(step('Cantilever, point load: v_max = P·a²(3L − a) / (6·E·I) at the free tip', 'textbook case', max.value, 'm'));
-  } else if (kind === 'udl' && !cantilever) {
-    steps.push(step('Simply supported, full UDL: v_max = 5·w·L⁴ / (384·E·I) at midspan', `5wL⁴/(384·E·I), w = ${n3(loads[0].intensity)}`, max.value, 'm'));
-  } else if (kind === 'udl' && cantilever) {
-    steps.push(step('Cantilever, full UDL: v_max = w·L⁴ / (8·E·I) at the free tip', 'textbook case', max.value, 'm'));
-  } else {
-    steps.push(step('This shape is integrated exactly, twice, from the moment diagram (EI·v″ = −M)', 'closed-form per load, constants pinned by the supports', max.value, 'm'));
-    steps.push(step('The position x* is where the slope θ = 0 (the lowest point of the curve)', 'found exactly by bisection', max.position, 'm'));
-  }
-  steps.push(step('Converted to millimetres for display (engine computes in metres)', '× 1000', mm, 'mm'));
-  steps.push(step('Stiffness used', `E·I = ${n3(EI)} kN·m² — bigger E·I, smaller sag`, EI, 'kN·m²'));
-  void L;
-  return { title: 'How the deflection was computed', steps };
+  const { input, deflection } = result;
+  const { max, EI } = deflection;
+  const only = input.loads.length === 1 ? input.loads[0] : null;
+  const method = deflectionMethod(only, input, EI);
+  const steps = [resultStep('Choose the beam case', method.explanation, method.formula, '', null, '')];
+  if (method.substitution) steps.push(substitutionStep(method.substitution));
+  steps.push(engineDeflectionStep(max));
+  const given = method.substitution ? givenInputs(result) : inputSummary(result);
+  if (!method.substitution) given.push(`E·I = ${n3(EI)} kN·m²`);
+  return group('How the maximum deflection was found', 'This explanation uses the stiffness shown for the beam.', given, steps);
 }
 
 function equilibriumGroup(result) {
   const e = result.equilibrium;
-  return {
-    title: 'The equilibrium self-check',
-    steps: [
-      step('ΣFx — every horizontal force summed (loads + reactions)', '≈ 0', e.sumFx, 'kN'),
-      step('ΣFy — every vertical force summed (loads + reactions)', '≈ 0', e.sumFy, 'kN'),
-      step('ΣM — every moment about A summed', '≈ 0', e.sumMz, 'kNm'),
-      step(e.satisfied ? 'All residuals are floating-point dust → the solution balances ✓' : 'A residual is too large — the engine flags it', '1e−13 is effectively zero', e.satisfied ? 1 : 0, ''),
-    ],
-  };
+  return group('Equilibrium check', 'The engine adds the applied forces and support reactions. Each residual should be zero; tiny rounding residuals are effectively zero.', givenInputs(result), [
+    resultStep('Horizontal forces', 'Sum of horizontal loads and reactions.', 'ΣFx', '', e.sumFx, 'kN'),
+    resultStep('Vertical forces', 'Sum of vertical loads and reactions.', 'ΣFy', '', e.sumFy, 'kN'),
+    resultStep('Moments about A', 'Sum of moments about the left end.', 'ΣMA', '', e.sumMz, 'kNm', true),
+  ]);
 }
 
-/**
- * The derivation groups available for a finished result. Determinate → the
- * full set; indeterminate/unstable → the classification explanation only.
- * Pure: reads the result, returns fresh arrays.
- */
 export function derivationGroups(result) {
-  if (!result || result.classification.status !== 'determinate') {
-    return classificationGroups(result ?? { classification: { status: 'unstable', unknowns: 0, degree: 0, unconstrained: ['everything'] } });
+  if (!result || result.classification.status !== 'determinate') return classificationGroups(result);
+  const reactionLabels = [];
+  for (const [side, letter] of [['left', 'A'], ['right', 'B']]) {
+    const reaction = result.reactions[side];
+    for (const key of ['Hx', 'Vy', 'Mz']) if (reaction?.[key] != null) reactionLabels.push(`Reaction ${{ Hx: 'H', Vy: 'V', Mz: 'M' }[key]}${letter}`);
   }
-  const groups = [
-    reactionsGroup(result),
+  return [
+    ...reactionLabels.map((label) => reactionsGroup(result, label)),
     shearGroup(result),
     momentGroup(result),
+    deflectionGroup(result),
     equilibriumGroup(result),
   ];
-  if (result.deflection) groups.splice(3, 0, deflectionGroup(result));
-  return groups;
 }
 
-/** Convenience for the popover: the group for one card, by label. */
 export function groupForCard(result, label) {
-  const groups = derivationGroups(result);
-  if (label.startsWith('Reaction')) return groups.find((g) => g.title.includes('reactions')) ?? null;
-  if (label.startsWith('Max shear')) return groups.find((g) => g.title.includes('shear')) ?? null;
-  if (label.startsWith('Max bending')) return groups.find((g) => g.title.includes('moment')) ?? null;
-  if (label.startsWith('Max deflection')) return groups.find((g) => g.title.includes('deflection')) ?? null;
+  if (!result || result.classification.status !== 'determinate') return classificationGroups(result)[0] ?? null;
+  if (label === 'Equilibrium') return equilibriumGroup(result);
+  if (label.startsWith('Reaction')) return reactionsGroup(result, label);
+  if (label.startsWith('Max shear')) return shearGroup(result);
+  if (label.startsWith('Max bending')) return momentGroup(result);
+  if (label.startsWith('Max deflection')) return deflectionGroup(result);
   return null;
 }

@@ -75,7 +75,7 @@ try {
       values: [...document.querySelectorAll('#result-cards .card-value')].map(n => n.textContent),
       loadRows: document.querySelectorAll('#load-list .load-row').length,
       errorsVisible: !document.getElementById('validation-msg').hidden,
-      glossaryOpen: !!document.querySelector('.popover:not([hidden])'),
+      glossaryOpen: !!document.querySelector('.teaching-backdrop:not([hidden]) .teaching-dialog'),
       summary: document.querySelector('.model-summary').innerText
     };
   })())`);
@@ -102,20 +102,20 @@ try {
   check('default theme follows System and the actual OS preference', s.mode === `Theme: System (${osTheme})` && s.theme === osTheme, `${s.mode}, ${s.theme} (device: ${osTheme})`);
   check('theme control has an accessible name', s.aria.includes('System'));
   check('Model editor opens by default with its current load count', s.modelOpen && s.modelCount === '1 load' && s.modelCountAria === '1 load in the beam');
-  check('equilibrium badge is in Results and retains status and M9 explanation', s.eqInResults && s.eqText.includes('self-check') && s.eqRole === 'status' && s.eqLive === 'polite' && s.eqTerm === 'equilibrium-check');
+  check('concise equilibrium status stays in Results with live, on-demand explanation semantics', s.eqInResults && s.eqText === 'Balanced ✓' && s.eqRole === 'status' && s.eqLive === 'polite' && s.eqTerm === 'equilibrium-check');
 
   // Light → Dark → System, then prove the System mode follows OS preferences on a fresh page.
   await click('#theme-toggle');
   s = JSON.parse(await snapshot());
   check('Light selection applies and is explicitly labelled', s.mode === 'Theme: Light' && s.theme === 'light' && s.aria.includes('Light'));
   check('light theme tokens cover panels, inputs and status badges', s.panelBg === 'rgb(255, 255, 255)' && s.inputBg === 'rgb(255, 255, 255)' && s.detBg !== 'rgba(0, 0, 0, 0)', JSON.stringify({ panel: s.panelBg, input: s.inputBg, status: s.detBg }));
-  const lightContrast = await evaluate(`(() => { const rgb=s=>s.match(/[\\d.]+/g).slice(0,3).map(Number); const lum=s=>{const c=rgb(s).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return .2126*c[0]+.7152*c[1]+.0722*c[2]}; const ratio=(a,b)=>{const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}; return {body:ratio(getComputedStyle(document.body).color,getComputedStyle(document.body).backgroundColor),muted:ratio(getComputedStyle(document.querySelector('.term-hint')).color,getComputedStyle(document.querySelector('.panel')).backgroundColor),status:ratio(getComputedStyle(document.querySelector('#det-badge')).color,getComputedStyle(document.querySelector('#det-badge')).backgroundColor)}; })()`);
+  const lightContrast = await evaluate(`(() => { const rgb=s=>s.match(/[\\d.]+/g).slice(0,3).map(Number); const lum=s=>{const c=rgb(s).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return .2126*c[0]+.7152*c[1]+.0722*c[2]}; const ratio=(a,b)=>{const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}; return {body:ratio(getComputedStyle(document.body).color,getComputedStyle(document.body).backgroundColor),muted:ratio(getComputedStyle(document.querySelector('.diagram-cue')).color,getComputedStyle(document.querySelector('.panel')).backgroundColor),status:ratio(getComputedStyle(document.querySelector('#det-badge')).color,getComputedStyle(document.querySelector('#det-badge')).backgroundColor)}; })()`);
   check('light primary, muted and status text meet the 4.5:1 readability target', Object.values(lightContrast).every(v=>v>=4.5), JSON.stringify(lightContrast));
   await click('#theme-toggle');
   s = JSON.parse(await snapshot());
   check('Dark selection changes the whole shell and diagram theme', s.mode === 'Theme: Dark' && s.theme === 'dark' && s.paper === '#111827' && s.panelBg === 'rgb(31, 41, 55)' && s.inputBg === 'rgb(17, 24, 39)' && s.halo === 'rgb(31, 41, 55)', JSON.stringify({ theme: s.theme, panel: s.panelBg, input: s.inputBg, halo: s.halo }));
   check('dark status colors remain distinct from the panel', s.detBg !== s.panelBg && s.eqBg !== s.panelBg && s.detInk !== s.panelBg, JSON.stringify({ detBg: s.detBg, eqBg: s.eqBg }));
-  const darkContrast = await evaluate(`(() => { const rgb=s=>s.match(/[\\d.]+/g).slice(0,3).map(Number); const lum=s=>{const c=rgb(s).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return .2126*c[0]+.7152*c[1]+.0722*c[2]}; const ratio=(a,b)=>{const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}; return {body:ratio(getComputedStyle(document.body).color,getComputedStyle(document.body).backgroundColor),muted:ratio(getComputedStyle(document.querySelector('.term-hint')).color,getComputedStyle(document.querySelector('.panel')).backgroundColor),status:ratio(getComputedStyle(document.querySelector('#det-badge')).color,getComputedStyle(document.querySelector('#det-badge')).backgroundColor)}; })()`);
+  const darkContrast = await evaluate(`(() => { const rgb=s=>s.match(/[\\d.]+/g).slice(0,3).map(Number); const lum=s=>{const c=rgb(s).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return .2126*c[0]+.7152*c[1]+.0722*c[2]}; const ratio=(a,b)=>{const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}; return {body:ratio(getComputedStyle(document.body).color,getComputedStyle(document.body).backgroundColor),muted:ratio(getComputedStyle(document.querySelector('.diagram-cue')).color,getComputedStyle(document.querySelector('.panel')).backgroundColor),status:ratio(getComputedStyle(document.querySelector('#det-badge')).color,getComputedStyle(document.querySelector('#det-badge')).backgroundColor)}; })()`);
   check('dark primary, muted and status text meet the 4.5:1 readability target', Object.values(darkContrast).every(v=>v>=4.5), JSON.stringify(darkContrast));
   await click('#theme-toggle');
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
@@ -174,8 +174,8 @@ try {
   await click('#eq-badge');
   s = JSON.parse(await snapshot());
   check('relocated equilibrium badge opens its explanation in dark mode', s.glossaryOpen);
-  const popover = await evaluate(`(() => { const p=document.querySelector('.popover'); const r=p.getBoundingClientRect(); return { bg:getComputedStyle(p).backgroundColor, color:getComputedStyle(p).color, inside:r.left>=0 && r.top>=0 && r.right<=innerWidth+1 && r.bottom<=innerHeight+1 }; })()`);
-  check('dark explanation popover is readable against its surface and fits the viewport', popover.bg !== popover.color && popover.inside, JSON.stringify(popover));
+  const popover = await evaluate(`(() => { const p=document.querySelector('.teaching-dialog'); const r=p.getBoundingClientRect(); return { bg:getComputedStyle(p).backgroundColor, color:getComputedStyle(p).color, inside:r.left>=0 && r.top>=0 && r.right<=innerWidth+1 && r.bottom<=innerHeight+1 }; })()`);
+  check('dark teaching dialog is readable against its surface and fits the viewport', popover.bg !== popover.color && popover.inside, JSON.stringify(popover));
   await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
 
   // A real input edit should still flow through the same engine and update results instantly.

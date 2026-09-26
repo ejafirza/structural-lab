@@ -1,215 +1,253 @@
-// Teaching layer (M9) browser verification via CDP (headless Edge).
-// Verifies the glossary popovers and the worked-derivation doors end-to-end
-// in a real browser: dotted-underline triggers open the right entry, chips
-// drill with a breadcrumb, cards open derivations quoting the cards' own
-// numbers verbatim, indeterminate beams keep the honesty doors, and zero
-// console errors.
-//
-// Hand-derived anchors: default P = 10 @ 3 m, L = 6 → RA = RB = 5 kN,
-// Mmax = 15 kNm sagging at x = 3 m; full UDL w = 2 → Mmax = wL²/8 = 9 kNm;
-// pin+pin → indeterminate, cards read "–".
-import { spawn } from 'node:child_process';
+// M11 assertions only: the imported session owns the loopback server, one Edge/profile,
+// CDP transport, and shutdown-gated cleanup. Teaching and layout checks run serially in it.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createTeachingBrowserSession } from './teaching-browser-session.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const TMP = path.resolve(HERE, 'tmp');
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
-const PORT = 9347;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const results = [];
 const check = (name, ok, detail = '') => {
   results.push({ name, ok });
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ' — ' + detail : ''}`);
 };
 
-let server, edge;
+const session = createTeachingBrowserSession({ root: ROOT, tmp: TMP, edgePath: EDGE });
+let browser;
 try {
-  const childEnv = { ...process.env };
-  delete childEnv.PORT;
-  server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env: childEnv });
-  await sleep(900);
-  edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-sync',
-    `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(TMP, 'teach-edge-' + Date.now())}`,
-    '--window-size=1200,1800', 'about:blank'], { stdio: 'ignore' });
-
-  let wsUrl = null;
-  for (let i = 0; i < 60 && !wsUrl; i++) {
-    try {
-      const list = (await (await fetch(`http://localhost:${PORT}/json`)).json()).filter((t) => t.type === 'page' && !/^(edge|chrome):\/\//.test(String(t.url || '')));
-      wsUrl = list[0]?.webSocketDebuggerUrl;
-    } catch {}
-    if (!wsUrl) await sleep(200);
-  }
-  const ws = new WebSocket(wsUrl);
-  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; setTimeout(() => rej(new Error('ws open timeout')), 15000); });
-
-  let id = 0; const pend = new Map(); const errors = [];
-  ws.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.id && pend.has(m.id)) { pend.get(m.id)(m.result); pend.delete(m.id); }
-    else if (m.method === 'Runtime.exceptionThrown') errors.push('exception: ' + (m.params.exceptionDetails?.text ?? ''));
-    else if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errors.push('console.error: ' + m.params.args.map((a) => a.value ?? a.description).join(' '));
-  };
-  const send = (method, params = {}) => new Promise((res) => { const i = ++id; pend.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
-  const evalJs = async (x) => {
-    const r = await send('Runtime.evaluate', { expression: x, returnByValue: true, awaitPromise: true });
-    if (r.exceptionDetails) throw new Error('eval: ' + JSON.stringify(r.exceptionDetails));
-    return r.result.value;
-  };
-
-  await send('Page.enable'); await send('Runtime.enable');
-  await send('Page.navigate', { url: 'http://localhost:8000/' });
-  await sleep(1800);
-  {
-    let ok = false;
-    for (let i = 0; i < 33 && !ok; i++) {
-      try { ok = String(await evalJs('document.title')).includes('Structural Lab'); } catch {}
-      if (!ok) await sleep(300);
-    }
-    if (!ok) throw new Error('app page never became live on the attached target');
-  }
-
-  const snap = () => evalJs(`JSON.stringify((() => {
-    const win = document.querySelector('.popover');
+  browser = await session.start();
+  const { send, evaluate, axTree } = browser;
+  const snapshot = () => evaluate(`JSON.stringify((() => {
+    const backdrop = document.querySelector('.teaching-backdrop');
+    const dialog = backdrop?.querySelector('.teaching-dialog');
     return {
-      open: !!win && !win.hidden,
-      title: win?.querySelector('.popover-title')?.textContent ?? '',
-      body: win?.querySelector('.popover-body')?.textContent ?? '',
-      path: win?.querySelector('.popover-path')?.textContent ?? '',
-      backHidden: win?.querySelector('.popover-back')?.hidden ?? true,
-      chips: win ? [...win.querySelectorAll('.popover-chip')].map(c => ({ t: c.textContent, sub: c.classList.contains('is-sub') })) : [],
-      steps: win ? [...win.querySelectorAll('.steps-formula')].map(n => n.textContent) : [],
-      values: win ? [...win.querySelectorAll('.steps-value')].map(n => n.textContent) : [],
-      triggerExpanded: document.querySelector('[data-term][aria-expanded="true"]') != null
-        || document.querySelector('[data-steps][aria-expanded="true"]') != null,
-      cards: [...document.querySelectorAll('#result-cards .card')].map(c => ({
-        label: c.querySelector('.card-label')?.textContent ?? '',
-        value: c.querySelector('.card-value')?.textContent ?? '',
-        steps: c.getAttribute('data-steps') ?? '',
-        term: c.getAttribute('data-term') ?? '',
-      })),
-      underlineCount: document.querySelectorAll('[data-term]').length,
-      detClass: document.getElementById('det-badge').className,
+      open: !!dialog && !backdrop.hidden,
+      title: dialog?.querySelector('.teaching-title')?.textContent ?? '',
+      body: dialog?.querySelector('.teaching-body')?.textContent ?? '',
+      equations: dialog ? [...dialog.querySelectorAll('.worked-equation')].map(node => node.textContent) : [],
+      headings: dialog ? [...dialog.querySelectorAll('.worked-step-title')].map(node => node.textContent) : [],
+      substitutions: dialog ? [...dialog.querySelectorAll('.worked-substitution')].map(node => node.textContent) : [],
+      values: dialog ? [...dialog.querySelectorAll('.worked-value,.worked-answer')].map(node => node.textContent) : [],
+      given: dialog ? [...dialog.querySelectorAll('.worked-given li')].map(node => node.textContent) : [],
+      focusableCount: dialog ? dialog.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),[tabindex]:not([tabindex="-1"])').length : 0,
+      topics: dialog ? [...dialog.querySelectorAll('.popover-chip,.topic-link,.breadcrumb')].length : 0,
+      role: dialog?.getAttribute('role'),
+      modal: dialog?.getAttribute('aria-modal'),
+      labelledTitle: dialog?.getAttribute('aria-labelledby') === 'teaching-title' && !!dialog?.querySelector('.teaching-title')?.textContent,
+      inertMain: document.getElementById('lab-content').inert,
+      inertHeader: document.querySelector('.topbar').inert,
+      active: document.activeElement?.getAttribute('aria-label') || document.activeElement?.className || '',
+      expanded: document.querySelector('[aria-expanded="true"]') !== null,
+      cards: [...document.querySelectorAll('#result-cards .card')].map(card => ({ label: card.querySelector('.card-label')?.textContent, value: card.querySelector('.card-value')?.textContent, steps: card.getAttribute('data-steps'), term: card.getAttribute('data-term') })),
+      stiffnessVisible: !document.getElementById('ctl-ei').hidden
     };
   })())`);
+  const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  const escape = () => evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  const wait = async () => { await sleep(250); return JSON.parse(await snapshot()); };
+  const pressKey = async (key, code, virtualKey, modifiers = 0) => {
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: virtualKey, modifiers });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: virtualKey, modifiers });
+  };
+  const waitForPage = async () => {
+    for (let i = 0; i < 60; i++) {
+      await sleep(200);
+      try {
+        if (await evaluate(`document.title.includes('Structural Lab') && document.readyState === 'complete' && document.querySelectorAll('#result-cards .card').length > 0`)) return;
+      } catch {}
+    }
+    throw new Error('app document failed to load');
+  };
+  const reload = async () => { await send('Page.reload', { ignoreCache: true }); await waitForPage(); };
 
-  const clickTerm = (sel) => evalJs(`document.querySelector(${JSON.stringify(sel)}).click()`);
-  const cardSel = (label) => `#result-cards .card:nth-child(${label})`;
+  await send('Page.enable');
+  await send('Runtime.enable');
+  await send('Accessibility.enable');
+  await send('Page.navigate', { url: browser.appUrl });
+  await waitForPage();
 
-  check('page loaded', (await evalJs('document.title')).includes('Structural Lab'));
-  check('teaching triggers present on the page (≥ 15 data-term elements)',
-    (await evalJs(`document.querySelectorAll('[data-term]').length`)) >= 15);
+  // Real-browser accessibility and default case.
+  const tree = await axTree();
+  const loadPositionSlider = tree.find((node) => node.role?.value === 'slider' && node.name?.value === 'Point load 1 position');
+  const loadLabelButton = tree.find((node) => node.role?.value === 'button' && node.name?.value === 'Explain point load');
+  check('accessibility tree separates the load label from its position slider', !!loadLabelButton && !!loadPositionSlider);
+  let state = JSON.parse(await snapshot());
+  check('page loads with unchanged standard result cards', state.cards.some((card) => card.value === '15 kNm'));
+  check('concise safety note and diagram sign/unit cues remain', await evaluate(`document.querySelectorAll('.foot').length === 1 && document.querySelector('.foot').textContent === 'For learning only—not for structural design verification.' && document.querySelector('.shear-panel .diagram-cue')?.textContent.includes('positive plots up') && document.querySelector('.moment-panel .diagram-cue')?.textContent.includes('sagging (+) below')`));
+  check('stiffness remains available with the default point load', state.stiffnessVisible);
 
-  // 1. glossary: click a support info chip → the supports entry
-  await clickTerm('label[for="sel-support-left"] .term-chip');
-  await sleep(250);
-  let s = JSON.parse(await snap());
-  check('click ℹ chip → supports entry opens', s.open && s.title === 'Supports', s.title);
-  check('window is a non-modal dialog', await evalJs(`document.querySelector('.popover').getAttribute('role')`) === 'dialog');
-  check('support chips offered (pin, roller, fixed, free, reaction)',
-    s.chips.length >= 4 && s.chips.some((c) => c.t.includes('Pin')), JSON.stringify(s.chips.map((c) => c.t)));
+  // Modal semantics, focus loop, keyboard activation, and close lifecycle.
+  await click('label[for="sel-support-left"] .term-chip');
+  state = await wait();
+  check('support info click opens one Supports topic', state.open && state.title === 'Supports');
+  check('dialog has labelled modal semantics and inerts page content', state.role === 'dialog' && state.labelledTitle && state.modal === 'true' && state.inertMain && state.inertHeader);
+  check('dialog contains one topic without nested navigation', state.topics === 0);
+  check('close receives focus and trigger tracks expanded state', state.active === 'Close explanation' && state.expanded);
+  const centered = await evaluate(`(() => { const r=document.querySelector('.teaching-dialog').getBoundingClientRect(); return Math.abs((r.left+r.right)/2-innerWidth/2)<2 && Math.abs((r.top+r.bottom)/2-innerHeight/2)<2; })()`);
+  check('desktop dialog is centered in the viewport', centered);
 
-  // 2. drill: pin support → vertical reaction, breadcrumb + back
-  await evalJs(`[...document.querySelectorAll('.popover-chip')].find(c => c.textContent.includes('Pin support')).click()`);
-  await sleep(200);
-  s = JSON.parse(await snap());
-  check('drill: Pin support entry opens', s.title === 'Pin support', s.title);
-  await evalJs(`[...document.querySelectorAll('.popover-chip')].find(c => c.textContent.includes('Vertical reaction')).click()`);
-  await sleep(200);
-  s = JSON.parse(await snap());
-  check('drill 2 levels: sub-concept opens inside the same window', s.title === 'Vertical reaction (V)', s.title);
-  check('breadcrumb tracks the trail (Supports › Pin › V)', s.path.includes('›') && s.path.includes('Vertical reaction'), s.path);
-  check('back button visible after drilling', s.backHidden === false);
-  await evalJs(`document.querySelector('.popover-back').click()`);
-  await sleep(200);
-  s = JSON.parse(await snap());
-  check('back returns to Pin support', s.title === 'Pin support', s.title);
+  await evaluate(`(() => { const probe=document.createElement('button'); probe.type='button'; probe.className='m11-focus-probe'; probe.textContent='Focus-loop probe'; probe.setAttribute('aria-label','M11 focus probe'); document.querySelector('.teaching-dialog').append(probe); document.querySelector('.teaching-close').focus(); })()`);
+  await pressKey('Tab', 'Tab', 9);
+  state = JSON.parse(await snapshot());
+  check('real browser Tab advances between dialog controls', state.active === 'M11 focus probe');
+  await pressKey('Tab', 'Tab', 9);
+  state = JSON.parse(await snapshot());
+  check('real browser Tab wraps from last control to first', state.active === 'Close explanation');
+  await pressKey('Tab', 'Tab', 9, 8);
+  state = JSON.parse(await snapshot());
+  check('real browser Shift+Tab wraps from first control to last', state.active === 'M11 focus probe');
+  await pressKey('Tab', 'Tab', 9, 8);
+  state = JSON.parse(await snapshot());
+  check('real browser Shift+Tab advances back to first control', state.active === 'Close explanation');
+  await evaluate(`document.querySelector('.m11-focus-probe').remove()`);
+  await escape();
+  state = JSON.parse(await snapshot());
+  check('Escape restores focus, aria state and background interaction', !state.open && state.active === 'About beam supports' && !state.expanded && !state.inertMain && !state.inertHeader);
 
-  // 3. honesty in content: pin teaches 2 reactions; fixed teaches 3
-  await evalJs(`document.querySelector('.popover-back').click()`).catch(() => {});
-  await sleep(150);
-  await evalJs(`[...document.querySelectorAll('.popover-chip')].find(c => c.textContent.includes('Fixed support'))?.click()`);
-  await sleep(200);
-  s = JSON.parse(await snap());
-  check('fixed-support body teaches 3 reactions (not torsion)',
-    s.title === 'Fixed support' && s.body.includes('3 reaction') && s.body.includes('moment reaction').valueOf() || s.body.includes('reaction moment'),
-    s.body.slice(0, 80));
+  await evaluate(`document.querySelector('[data-term="point-load"]').focus()`);
+  await pressKey(' ', 'Space', 32);
+  state = await wait();
+  check('Space activates a glossary topic by keyboard', state.open && state.title === 'Point load');
+  await escape();
 
-  // 4. Escape closes and focus returns to the trigger
-  await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
-  await sleep(200);
-  check('Escape closes the window', !(await evalJs(`!!document.querySelector('.popover') && !document.querySelector('.popover').hidden`)));
+  // Standard result derivations stay card-specific and trace to the engine.
+  await evaluate(`document.querySelectorAll('#result-cards .card').forEach(card => { if (card.querySelector('.card-label')?.textContent === 'Reaction VB') card.focus(); })`);
+  await pressKey('Enter', 'Enter', 13);
+  state = await wait();
+  check('Enter opens the specific Reaction VB explanation', state.open && state.title.includes('reaction VB'));
+  check('reaction shows equation, substitution and 5 kN engine answer', state.equations.some((equation) => equation.includes('RB = P·a / L')) && state.substitutions.includes('RB = 10 × 3 / 6 kN') && state.values.some((value) => value.includes('5 kN')));
+  check('reaction separates equation, substitution and result steps', state.headings.includes('Take moments about A') && state.headings.includes('Substitute the given values') && state.headings.includes('Report the engine result'));
+  await escape();
 
-  // 5. derivation doors: Mmax card → the worked steps, quoting the card value
-  s = JSON.parse(await snap());
-  const mmaxCard = s.cards.find((c) => c.label === 'Max bending moment');
-  check('solved cards carry data-steps doors', s.cards.every((c) => c.steps.length > 0), JSON.stringify(s.cards.map((c) => c.label)));
-  await evalJs(`[...document.querySelectorAll('#result-cards .card')].find(c => c.querySelector('.card-label')?.textContent === 'Max bending moment').click()`);
-  await sleep(250);
-  s = JSON.parse(await snap());
-  check('Mmax card opens the worked derivation', s.open && s.steps.length >= 3, JSON.stringify(s.steps.slice(0, 2)));
-  check('derivation quotes the hand value 15 kNm', s.values.some((v) => v.startsWith('15')), JSON.stringify(s.values));
-  check('derivation names the closed form (P·a·b/L)', s.steps.some((f) => f.includes('P·a·b')), JSON.stringify(s.steps));
+  await click('#result-cards .card:nth-child(4)');
+  state = await wait();
+  check('point-load Mmax uses valid formula/substitution and 15 kNm engine answer', state.open && state.equations.some((equation) => equation.includes('Mmax = P·a·b / L')) && state.substitutions.includes('Mmax = 10 × 3 × 3 / 6 kNm') && state.values.some((value) => value.includes('15 kNm')));
+  await escape();
+  await click('#result-cards .card:last-child');
+  state = await wait();
+  check('centered point deflection uses its valid formula and substitution', state.equations.some((equation) => equation.includes('P·L³ / (48·E·I)')) && state.substitutions.includes('vmax = 10 × 6³ / (48 × 20000) m'));
+  await escape();
+  await evaluate(`(() => { const input=document.getElementById('num-pos'); input.value='2'; input.dispatchEvent(new Event('input')); })()`);
+  await click('#result-cards .card:last-child');
+  state = await wait();
+  check('off-center point deflection avoids the centered-load shortcut', state.equations.includes('E·I·v″(x) = −M(x)') && state.equations.every((equation) => !equation.includes('/ (48·E·I)')));
+  await escape();
 
-  // 6. the equilibrium badge is a teaching trigger
-  await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
-  await evalJs(`document.getElementById('eq-badge').click()`);
-  await sleep(250);
-  s = JSON.parse(await snap());
-  check('equilibrium badge explains the self-check', s.open && s.title === 'Equilibrium self-check', s.title);
+  await click('#btn-add-distributed');
+  await evaluate(`document.querySelector('#preset-chips [data-preset="full"]').click()`);
+  await evaluate(`document.querySelectorAll('#load-list .load-remove')[0].click()`);
+  await click('#result-cards .card.accent');
+  state = await wait();
+  check('full-span UDL Mmax uses valid substitution and 9 kNm engine answer', state.equations.some((equation) => equation.includes('w·L² / 8')) && state.substitutions.includes('Mmax = 2 × 6² / 8 kNm') && state.values.some((value) => value.includes('9 kNm')));
+  await escape();
+  await click('#btn-add-point');
+  state = JSON.parse(await snapshot());
+  check('beam stiffness remains visible after switching load selection', state.stiffnessVisible);
 
-  // 7. UDL beam → derivation still exact (wL²/8 = 9). Add the distributed
-  // load FIRST (chips apply to the SELECTED distributed load only — the M8
-  // preset guard), then apply the Full UDL preset, then remove the point load.
-  await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
-  await evalJs(`document.getElementById('btn-add-distributed').click()`);
-  await sleep(300);
-  await evalJs(`document.querySelector('#preset-chips .preset-chip[data-preset="full"]').click()`);
-  await sleep(300);
-  await evalJs(`document.querySelectorAll('#load-list .load-row .load-remove')[0].click()`);
-  await sleep(400);
-  await evalJs(`[...document.querySelectorAll('#result-cards .card')].find(c => c.querySelector('.card-label')?.textContent === 'Max bending moment').click()`);
-  await sleep(250);
-  s = JSON.parse(await snap());
-  check('UDL: derivation quotes wL²/8 = 9 kNm', s.values.some((v) => v.startsWith('9')), JSON.stringify(s.values));
+  // General mixed profile path: actual given data, method, and engine output only.
+  await reload();
+  await click('#btn-add-distributed');
+  await evaluate(`document.querySelector('#preset-chips [data-preset="stepped"]').click()`);
+  await click('#result-cards .card.accent');
+  state = await wait();
+  check('point + stepped-profile Mmax lists actual point and profile inputs', state.given.some((datum) => datum.includes('P = 10 kN')) && state.given.some((datum) => datum.includes('profile points (x, w)')));
+  check('mixed-profile Mmax reports engine peak method and result without numeric shortcut', state.equations.some((equation) => equation.includes('Candidates: V(x*) = 0')) && state.headings.includes('Check peak candidates') && state.headings.includes('Report the engine result') && state.values.length === 1 && !state.substitutions.some((text) => /Mmax\s*=/.test(text)));
+  await escape();
+  await click('#result-cards .card:last-child');
+  state = await wait();
+  check('mixed-profile deflection lists inputs/E·I and exact integration method', state.given.some((datum) => datum.includes('P = 10 kN')) && state.given.some((datum) => datum.includes('profile points (x, w)')) && state.given.some((datum) => datum.includes('E·I =')) && state.equations.includes('E·I·v″(x) = −M(x)') && !state.equations.some((equation) => equation.includes('P·L³ / (48·E·I)')));
+  check('mixed-profile deflection reports only its engine answer', state.headings.includes('Report the engine result') && state.values.length === 1 && state.values[0].startsWith('Result:'));
+  await escape();
 
-  // 8. honesty: pin+pin → doors become data-term explainers, no derivations
-  await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
-  await evalJs(`(() => { const sel = document.getElementById('sel-support-right'); sel.value = 'pin'; sel.dispatchEvent(new Event('change')); })()`);
-  await sleep(400);
-  s = JSON.parse(await snap());
-  check('indeterminate: cards carry the why doors (data-term)',
-    s.cards.length >= 2 && s.cards.every((c) => c.term === 'statically-indeterminate' && !c.steps), JSON.stringify(s.cards.map((c) => c.term)));
-  await evalJs(`[...document.querySelectorAll('#result-cards .card')][0].click()`);
-  await sleep(250);
-  s = JSON.parse(await snap());
-  check('indeterminate: the door explains WHY it is not solved',
-    s.open && s.title === 'Statically indeterminate' && s.body.includes('statics'), s.title);
+  // Honest unsolved state, backdrop close, cap/reload regressions.
+  await evaluate(`(() => { const select=document.getElementById('sel-support-right'); select.value='pin'; select.dispatchEvent(new Event('change')); })()`);
+  state = JSON.parse(await snapshot());
+  const equilibrium = await evaluate(`(() => {const e=document.getElementById('eq-badge');return {text:e.textContent,aria:e.getAttribute('aria-label'),tabindex:e.getAttribute('tabindex')};})()`);
+  check('indeterminate cards explain the unsolved state without derivation routes', state.cards.length >= 2 && state.cards.every((card) => card.term === 'statically-indeterminate' && !card.steps));
+  check('unsolved equilibrium state is truthful and not tabbable', equilibrium.text === 'Not solved' && equilibrium.aria.includes('no equilibrium residuals') && equilibrium.tabindex === '-1');
+  await click('#result-cards .card');
+  state = await wait();
+  check('honesty door explains why the beam is not solved', state.open && state.title === 'Statically indeterminate' && /statics/i.test(state.body));
+  await escape();
+  await click('label[for="sel-support-left"] .term-chip');
+  const fits = await evaluate(`(() => {const r=document.querySelector('.teaching-dialog').getBoundingClientRect();return r.left>=0&&r.top>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1;})()`);
+  check('dialog stays within the desktop viewport', fits);
+  await evaluate(`document.querySelector('.teaching-backdrop').click()`);
+  state = JSON.parse(await snapshot());
+  check('backdrop click closes modal and restores background', !state.open && !state.inertMain);
+  check('rapid additions stop at the supported six-load cap', await evaluate(`(() => {const add=document.getElementById('btn-add-point');for(let i=0;i<8;i++)add.click();return document.querySelectorAll('#load-list .load-row').length===6&&add.disabled;})()`));
+  await reload();
+  state = JSON.parse(await snapshot());
+  check('reload restores default solved beam without stale modal', !state.open && !state.inertMain && state.cards.some((card) => card.value === '15 kNm'));
 
-  // 9. popover flips above when near the viewport bottom
-  await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
-  const flipped = await evalJs(`(() => {
-    const t = document.getElementById('eq-badge');
-    t.click();
-    const win = document.querySelector('.popover');
-    const r = win.getBoundingClientRect();
-    const inside = r.left >= 0 && r.right <= window.innerWidth + 1 && r.top >= -1 && r.bottom <= window.innerHeight + 1;
-    const closed = document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    return inside;
+  // Eight SVG layout fixtures and desktop/phone dialog geometry, reusing same Edge/profile.
+  const svgAudit = () => evaluate(`(() => {
+    const overflow = [], overlaps = [], boxes = [];
+    for (const id of ['beam-svg','sfd-svg','bmd-svg','defl-svg']) {
+      const svg = document.getElementById(id), vb = svg.viewBox.baseVal;
+      for (const text of svg.querySelectorAll('text')) {
+        const b = text.getBBox();
+        if (b.x < -.5 || b.y < -.5 || b.x + b.width > vb.width + .5 || b.y + b.height > vb.height + .5) overflow.push({ id, text: text.textContent });
+        boxes.push({ id, text: text.textContent, x: b.x, y: b.y, w: b.width, h: b.height });
+      }
+    }
+    for (let i=0;i<boxes.length;i++) for (let j=i+1;j<boxes.length;j++) {
+      const a=boxes[i],b=boxes[j]; if(a.id!==b.id) continue;
+      const ox=Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x), oy=Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y);
+      if(ox>2&&oy>2) overlaps.push({id:a.id,a:a.text,b:b.text});
+    }
+    return {overflow,overlaps};
   })()`);
-  check('popover opens fully inside the viewport', flipped === true);
+  const fullUdl = async () => {
+    await click('#btn-add-distributed');
+    await sleep(200);
+    await click('#preset-chips [data-preset="full"]');
+    await evaluate(`document.querySelectorAll('#load-list .load-remove')[0].click()`);
+  };
+  const configs = [
+    ['default point beam', async () => {}],
+    ['full UDL', fullUdl],
+    ['cantilever tip load', async () => { await evaluate(`(() => {const a=document.getElementById('sel-support-left'),b=document.getElementById('sel-support-right');a.value='fixed';a.dispatchEvent(new Event('change'));b.value='free';b.dispatchEvent(new Event('change'));})()`); }],
+    ['stepped profile', async () => { await click('#btn-add-distributed'); await sleep(200); await click('#preset-chips [data-preset="stepped"]'); await evaluate(`document.querySelectorAll('#load-list .load-remove')[0].click()`); }],
+    ['profile + point load', async () => { await click('#btn-add-distributed'); await sleep(200); await click('#preset-chips [data-preset="stepped"]'); await click('#btn-add-point'); }],
+    ['long span', async () => { await evaluate(`(() => {const e=document.getElementById('num-span');e.value='20';e.dispatchEvent(new Event('input'));})()`); }],
+    ['low stiffness', async () => { await evaluate(`document.querySelector('#ei-chips [data-preset="timber"]').click()`); }],
+    ['indeterminate', async () => { await evaluate(`(() => {const e=document.getElementById('sel-support-right');e.value='pin';e.dispatchEvent(new Event('change'));})()`); }],
+  ];
+  for (const [name, setup] of configs) {
+    await reload();
+    await setup();
+    await sleep(400);
+    const result = await svgAudit();
+    check(`SVG audit: ${name}`, result.overflow.length === 0 && result.overlaps.length === 0, `overflow=${result.overflow.length}, overlaps=${result.overlaps.length}`);
+  }
 
-  check('zero console errors / exceptions across the whole run', errors.length === 0, errors.join(' | ').slice(0, 200));
-} catch (err) {
-  check('harness completed without a setup crash', false, String(err).slice(0, 300));
+  await reload();
+  await click('label[for="sel-support-left"] .term-chip');
+  await sleep(200);
+  const desktop = await evaluate(`(() => {const r=document.querySelector('.teaching-dialog').getBoundingClientRect();return {inside:r.left>=0&&r.top>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1,cx:Math.abs((r.left+r.right)/2-innerWidth/2)<2,cy:Math.abs((r.top+r.bottom)/2-innerHeight/2)<2};})()`);
+  check('dialog is centered and fits desktop viewport', desktop.inside && desktop.cx && desktop.cy);
+  await evaluate(`document.querySelector('.teaching-close').click()`);
+  await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 800, deviceScaleFactor: 1, mobile: false });
+  await sleep(250);
+  await click('label[for="sel-support-left"] .term-chip');
+  await sleep(200);
+  const phone = await evaluate(`(() => {const d=document.querySelector('.teaching-dialog'),b=document.querySelector('.teaching-body'),r=d.getBoundingClientRect();return {inside:r.left>=0&&r.right<=innerWidth+1&&r.top>=0&&r.bottom<=innerHeight+1,width:r.width,viewport:innerWidth,overflow:getComputedStyle(b).overflowY};})()`);
+  check('dialog fits 360px viewport and content region scrolls', phone.inside && phone.width <= phone.viewport + 1 && phone.overflow === 'auto');
+  check('modal inerts all preexisting body siblings', await evaluate(`[...document.body.children].filter(node=>node!==document.querySelector('.teaching-backdrop')).every(node=>node.inert)`));
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+  await send('Emulation.clearDeviceMetricsOverride');
+  check('browser emitted no console errors or runtime exceptions', browser.browserErrors.length === 0, browser.browserErrors.join(' | ').slice(0, 220));
+} catch (error) {
+  check('combined M11 browser assertions complete without setup error', false, String(error).slice(0, 300));
 } finally {
-  try { if (edge) edge.kill(); } catch {}
-  try { if (server) server.kill(); } catch {}
+  const cleanup = await session.close();
+  check('owned Edge process stopped, CDP endpoint closed, and only its profile removed', cleanup.shutdownConfirmed && cleanup.profileRemoved, cleanup.cleanupError ?? 'cleanup confirmed');
 }
 
-const passed = results.filter((r) => r.ok).length;
+const passed = results.filter((result) => result.ok).length;
 console.log(`\n${passed}/${results.length} checks passed`);
-process.exit(passed === results.length ? 0 : 1);
+process.exitCode = passed === results.length ? 0 : 1;

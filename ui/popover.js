@@ -1,271 +1,228 @@
 /**
- * popover.js — the M9 teaching popover (one window per page, zero deps).
- * -------------------------------------------------------------
- * Opens on click / Enter / Space of any element carrying `data-term` (a
- * glossary entry) or `data-steps` (a worked derivation, by card label).
- * Inside a window, sub-concepts are chips that replace the window content —
- * a breadcrumb tracks the trail, so the whole dictionary is reachable while
- * only ONE window ever exists.
- *
- * Accessibility contract: triggers keep focus; the window is a non-modal
- * `role="dialog"` labelled by its title; Escape and click-outside close it;
- * focus returns to the trigger on close; `aria-expanded` tracks the trigger.
- * All content is built with createElement/textContent — never innerHTML.
- *
- * initTeachingPopover(doc, { getGlossary, getSteps }) — app.js supplies the
- * two content providers (glossary.js and explain.js stay decoupled here).
+ * popover.js — focused, one-topic teaching dialog (zero dependencies).
+ * A learner opens one explanation at a time, only by activating a marked term
+ * or result. There are no related-topic chips, breadcrumbs, or auto-advance.
  */
 
-const EDGE = 8;   // viewport margin the window must respect
-const WIDTH = 360; // popover width in px (kept in sync with style.css)
+const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function initTeachingPopover(doc, { getGlossary, getSteps }) {
-  let win = null;          // the singleton window element
-  let lastTrigger = null;  // element to restore focus to on close
-  let trail = [];          // breadcrumb of glossary keys, e.g. ['pin-support','vertical-reaction']
+  let dialog = null;
+  let lastTrigger = null;
+  let inertStates = [];
 
-  function ensureWindow() {
-    if (win) return win;
-    win = doc.createElement('div');
-    win.className = 'popover';
-    win.setAttribute('role', 'dialog');
-    win.setAttribute('aria-modal', 'false');
-    win.hidden = true;
+  function ensureDialog() {
+    if (dialog) return dialog;
+    dialog = doc.createElement('div');
+    dialog.className = 'teaching-backdrop';
+    dialog.hidden = true;
+    dialog.setAttribute('data-teaching-backdrop', '');
 
-    const bar = doc.createElement('div');
-    bar.className = 'popover-bar';
+    const panel = doc.createElement('section');
+    panel.className = 'teaching-dialog';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-labelledby', 'teaching-title');
+    panel.setAttribute('tabindex', '-1');
 
-    const back = doc.createElement('button');
-    back.type = 'button';
-    back.className = 'popover-back';
-    back.hidden = true;
-    back.textContent = '‹ back';
-    back.setAttribute('aria-label', 'Back to the previous term');
-    back.addEventListener('click', (evt) => {
-      evt.stopPropagation(); // the delegated document handler must not re-judge this click
-      trail.pop(); // the current entry
-      const prev = trail[trail.length - 1];
-      if (prev) showTerm(prev, trail.slice());
-      else renderHome(lastTrigger?.getAttribute('data-steps') ?? '');
-    });
-
-    const path = doc.createElement('span');
-    path.className = 'popover-path';
-
+    const header = doc.createElement('header');
+    header.className = 'teaching-header';
+    const title = doc.createElement('h2');
+    title.className = 'teaching-title';
+    title.id = 'teaching-title';
     const close = doc.createElement('button');
     close.type = 'button';
-    close.className = 'popover-close';
-    close.textContent = '✕';
-    close.setAttribute('aria-label', 'Close the explanation');
-    close.addEventListener('click', (evt) => {
-      evt.stopPropagation();
-      closeWindow();
-    });
+    close.className = 'teaching-close';
+    close.textContent = 'Close';
+    close.setAttribute('aria-label', 'Close explanation');
+    close.addEventListener('click', closeDialog);
+    header.append(title, close);
 
-    bar.append(back, path, close);
-    const title = doc.createElement('h3');
-    title.className = 'popover-title';
     const body = doc.createElement('div');
-    body.className = 'popover-body';
-    const chips = doc.createElement('div');
-    chips.className = 'popover-chips';
-    const stepsBox = doc.createElement('div');
-    stepsBox.className = 'popover-steps';
-    win.append(bar, title, body, stepsBox, chips);
-    (doc.body ?? doc.documentElement ?? doc).append(win);
-    win._els = { back, path, title, body, stepsBox, chips };
-    return win;
-  }
-
-  function chip(labelText, key, className) {
-    const b = doc.createElement('button');
-    b.type = 'button';
-    b.className = `popover-chip ${className}`;
-    b.textContent = labelText;
-    b.addEventListener('click', (evt) => {
-      // stopPropagation is load-bearing: showTerm re-renders the window and
-      // detaches THIS chip, so the bubbled document-level handler can no
-      // longer recognise the click as "inside the window" and would close
-      // it and wipe the breadcrumb trail. (Found by the CDP harness — a
-      // fake-DOM test cannot see it: shims keep parentElement alive after
-      // replaceChildren, a real DOM does not.)
-      evt.stopPropagation();
-      showTerm(key, trail.concat(key));
+    body.className = 'teaching-body';
+    panel.append(header, body);
+    dialog.append(panel);
+    (doc.body ?? doc.documentElement ?? doc).append(dialog);
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) closeDialog();
     });
-    return b;
+    panel.addEventListener('click', (event) => event.stopPropagation());
+    dialog._els = { panel, title, body, close };
+    return dialog;
   }
 
-  /** Render a glossary entry (by key) into the window. */
-  function showTerm(key, nextTrail) {
+  function closeDialog() {
+    if (!dialog || dialog.hidden) return;
+    dialog.hidden = true;
+    for (const [node, wasInert] of inertStates) node.inert = wasInert;
+    inertStates = [];
+    if (lastTrigger) {
+      lastTrigger.setAttribute?.('aria-expanded', 'false');
+      if (lastTrigger.isConnected !== false) lastTrigger.focus?.();
+    }
+    lastTrigger = null;
+  }
+
+  function openDialog(trigger, titleText, renderBody) {
+    const view = ensureDialog();
+    const wasOpen = !view.hidden;
+    if (wasOpen) {
+      const oldTrigger = lastTrigger;
+      oldTrigger?.setAttribute?.('aria-expanded', 'false');
+      if (oldTrigger?.isConnected === false) oldTrigger.setAttribute?.('aria-expanded', 'false');
+    }
+    lastTrigger = trigger;
+    const { title, body, close } = view._els;
+    title.textContent = titleText;
+    body.replaceChildren();
+    renderBody(body);
+    view.hidden = false;
+    if (!wasOpen) {
+      const content = doc.getElementById?.('lab-content');
+      const topbar = doc.querySelector?.('.topbar');
+      const bodySiblings = [...(doc.body?.children ?? [])].filter((node) => node !== view);
+      const background = [...new Set([content, topbar, ...bodySiblings].filter(Boolean))];
+      inertStates = background.map((node) => [node, !!node.inert]);
+      for (const [node] of inertStates) node.inert = true;
+    }
+    trigger?.setAttribute?.('aria-expanded', 'true');
+    close.focus?.();
+  }
+
+  function renderTerm(trigger, key) {
     const entry = getGlossary(key);
     if (!entry) return;
-    trail = nextTrail ?? [key];
-    const { back, path, title, body, stepsBox, chips } = ensureWindow()._els;
-
-    title.textContent = entry.term;
-    body.textContent = entry.body;
-    stepsBox.replaceChildren();
-    stepsBox.hidden = true;
-    chips.replaceChildren();
-
-    for (const sub of entry.subs ?? []) {
-      const subEntry = getGlossary(sub);
-      if (subEntry) chips.append(chip(subEntry.term, sub, 'is-sub'));
-    }
-    for (const also of entry.seeAlso ?? []) {
-      const alsoEntry = getGlossary(also);
-      if (alsoEntry) chips.append(chip(alsoEntry.term, also, 'is-seealso'));
-    }
-
-    back.hidden = trail.length < 2;
-    const names = trail.map((k) => getGlossary(k)?.term ?? k);
-    path.textContent = names.join(' › ');
-    title.id = 'popover-title';
-    win.setAttribute('aria-labelledby', 'popover-title');
-    open();
+    openDialog(trigger, entry.term, (body) => {
+      const text = doc.createElement('p');
+      text.className = 'teaching-copy';
+      text.textContent = entry.body;
+      body.append(text);
+    });
   }
 
-  /** Render a derivation (by results-card label) into the window. */
-  function showSteps(label) {
-    const groups = getSteps(label);
-    if (!groups || !groups.length) return;
-    trail = [];
-    const { back, path, title, body, stepsBox, chips } = ensureWindow()._els;
-    back.hidden = true;
-    path.textContent = 'Worked derivation';
-    title.textContent = groups[0].title;
-    body.replaceChildren();
-    chips.replaceChildren();
+  function formatValue(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return String(value);
+    const abs = Math.abs(value);
+    if (abs !== 0 && (abs < 1e-6 || abs >= 1e7)) return value.toExponential(2);
+    return String(Number(value.toPrecision(4)));
+  }
 
-    // One block per group; each step is one readable line:
-    //   formula — substitution — value unit
-    for (const g of groups) {
-      const gt = doc.createElement('div');
-      gt.className = 'steps-group-title';
-      gt.textContent = groups.length > 1 ? g.title : '';
-      const list = doc.createElement('div');
-      list.className = 'steps-list';
-      for (const s of g.steps) {
-        const row = doc.createElement('div');
-        row.className = 'steps-row';
-        const f = doc.createElement('span');
-        f.className = 'steps-formula';
-        f.textContent = s.formula || s.substitution || '—';
-        const v = doc.createElement('span');
-        v.className = 'steps-value';
-        v.textContent = s.value == null ? '—' : `${formatValue(s.value)}${s.unit ? ' ' + s.unit : ''}`;
-        row.append(f, v);
-        if (s.formula && s.substitution) {
-          const sub = doc.createElement('div');
-          sub.className = 'steps-sub';
-          sub.textContent = s.substitution;
-          row.append(sub);
+  function renderSteps(trigger, label) {
+    const group = getSteps(label);
+    if (!group) return;
+    openDialog(trigger, group.title, (body) => {
+      const intro = doc.createElement('p');
+      intro.className = 'teaching-copy teaching-intro';
+      intro.textContent = group.intro || 'Follow the steps below. The final values match the displayed result.';
+      body.append(intro);
+
+      if (group.given?.length) {
+        const given = doc.createElement('section');
+        given.className = 'worked-given';
+        const givenTitle = doc.createElement('h3');
+        givenTitle.textContent = 'Given';
+        const givenList = doc.createElement('ul');
+        for (const datum of group.given) {
+          const item = doc.createElement('li');
+          item.textContent = datum;
+          givenList.append(item);
+        }
+        given.append(givenTitle, givenList);
+        body.append(given);
+      }
+
+      const list = doc.createElement('ol');
+      list.className = 'worked-steps';
+      for (const item of group.steps) {
+        const row = doc.createElement('li');
+        row.className = item.final ? 'worked-step worked-step-final' : 'worked-step';
+
+        const heading = doc.createElement('h3');
+        heading.className = 'worked-step-title';
+        heading.textContent = item.title;
+        row.append(heading);
+
+        if (item.explanation) {
+          const explanation = doc.createElement('p');
+          explanation.className = 'worked-step-explanation';
+          explanation.textContent = item.explanation;
+          row.append(explanation);
+        }
+        if (item.equation) {
+          const equation = doc.createElement('div');
+          equation.className = 'worked-equation';
+          equation.setAttribute('role', 'math');
+          equation.textContent = item.equation;
+          row.append(equation);
+        }
+        if (item.substitution) {
+          const substitution = doc.createElement('p');
+          substitution.className = 'worked-substitution';
+          substitution.textContent = item.substitution;
+          row.append(substitution);
+        }
+        if (item.value != null) {
+          const value = doc.createElement('p');
+          value.className = item.final ? 'worked-answer' : 'worked-value';
+          value.textContent = `${item.final ? 'Result' : 'Value'}: ${formatValue(item.value)}${item.unit ? ` ${item.unit}` : ''}`;
+          row.append(value);
         }
         list.append(row);
       }
-      const block = doc.createElement('div');
-      block.className = 'steps-group';
-      block.append(gt, list);
-      body.append(block);
-    }
-    stepsBox.hidden = true;
-    title.id = 'popover-title';
-    win.setAttribute('aria-labelledby', 'popover-title');
-    open();
-  }
-
-  function renderHome(stepsLabel) {
-    if (stepsLabel) showSteps(stepsLabel);
-    else if (lastTrigger?.getAttribute('data-term')) showTerm(lastTrigger.getAttribute('data-term'), [lastTrigger.getAttribute('data-term')]);
-    else closeWindow();
-  }
-
-  function formatValue(v) {
-    if (typeof v !== 'number' || !Number.isFinite(v)) return String(v);
-    const abs = Math.abs(v);
-    if (abs !== 0 && (abs < 1e-6 || abs >= 1e7)) return v.toExponential(1);
-    return String(Number(v.toPrecision(4)));
-  }
-
-  function open() {
-    win.hidden = false;
-    win.classList.add('open');
-    position();
-    if (lastTrigger) lastTrigger.setAttribute('aria-expanded', 'true');
-  }
-
-  function position() {
-    // Fixed positioning near the trigger, flipping at the viewport edge.
-    // In fake-DOM test environments the trigger has no geometry — skip.
-    if (!lastTrigger || typeof lastTrigger.getBoundingClientRect !== 'function') return;
-    const t = lastTrigger.getBoundingClientRect();
-    const vw = Number(doc.documentElement?.clientWidth) || (typeof window !== 'undefined' ? Number(window.innerWidth) : 0) || 1200;
-    const vh = Number(doc.documentElement?.clientHeight) || (typeof window !== 'undefined' ? Number(window.innerHeight) : 0) || 900;
-    let left = t.left + t.width / 2 - WIDTH / 2;
-    left = Math.max(EDGE, Math.min(left, vw - WIDTH - EDGE));
-    const spaceBelow = vh - t.bottom - EDGE - 8;
-    const spaceAbove = t.top - EDGE - 8;
-    const above = spaceBelow < 300 && spaceAbove > spaceBelow;
-    const available = Math.max(120, (above ? spaceAbove : spaceBelow) - 2);
-    win.style.left = `${Math.round(left)}px`;
-    win.style.top = above ? `${Math.round(t.top - 8)}px` : `${Math.round(t.bottom + 8)}px`;
-    win.style.maxHeight = `${Math.floor(available)}px`;
-    win.classList.toggle('is-above', above);
-  }
-
-  function closeWindow() {
-    if (!win || win.hidden) return;
-    win.hidden = true;
-    win.classList.remove('open');
-    if (lastTrigger) {
-      lastTrigger.setAttribute('aria-expanded', 'false');
-      if (typeof lastTrigger.focus === 'function') lastTrigger.focus();
-    }
-    lastTrigger = null;
-    trail = [];
+      body.append(list);
+    });
   }
 
   function triggerOf(target) {
-    let n = target;
-    while (n && n !== doc.body && n !== doc.documentElement) {
-      if (n.getAttribute && (n.getAttribute('data-term') || n.getAttribute('data-steps'))) return n;
-      n = n.parentElement ?? n.parentNode ?? null;
+    let node = target;
+    while (node && node !== doc.body && node !== doc.documentElement) {
+      if (node.getAttribute?.('data-term') || node.getAttribute?.('data-steps')) return node;
+      node = node.parentElement ?? node.parentNode ?? null;
     }
     return null;
   }
 
-  // Delegated events — one listener set for the whole page.
-  doc.addEventListener('click', (evt) => {
-    const trigger = triggerOf(evt.target);
-    if (trigger) {
-      evt.preventDefault();
-      const already = trigger === lastTrigger && win && !win.hidden;
-      if (already) { closeWindow(); return; }
-      lastTrigger = trigger;
-      const key = trigger.getAttribute('data-term');
-      const label = trigger.getAttribute('data-steps');
-      if (key) showTerm(key, [key]);
-      else if (label) showSteps(label);
+  function activate(trigger) {
+    const term = trigger.getAttribute('data-term');
+    const steps = trigger.getAttribute('data-steps');
+    if (term) renderTerm(trigger, term);
+    else if (steps) renderSteps(trigger, steps);
+  }
+
+  doc.addEventListener('click', (event) => {
+    if (dialog && !dialog.hidden && dialog.contains?.(event.target)) return;
+    const trigger = triggerOf(event.target);
+    if (!trigger) return;
+    event.preventDefault();
+    activate(trigger);
+  });
+
+  doc.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { closeDialog(); return; }
+    const modalOpen = !!dialog && !dialog.hidden;
+    if (modalOpen && event.key === 'Tab') {
+      const nodes = [...(dialog.querySelectorAll?.(FOCUSABLE) ?? [])]
+        .filter((node) => !node.hidden && node.getAttribute?.('aria-hidden') !== 'true');
+      if (!nodes.length) { event.preventDefault(); dialog._els.panel.focus?.(); return; }
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      const active = doc.activeElement;
+      if (event.shiftKey && (active === first || !dialog.contains?.(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog.contains?.(active))) {
+        event.preventDefault();
+        first.focus();
+      }
       return;
     }
-    // Clicked elsewhere: close unless the click was inside the window.
-    let n = evt.target;
-    while (n) { if (n === win) return; n = n.parentElement ?? n.parentNode ?? null; }
-    closeWindow();
-  });
-
-  doc.addEventListener('keydown', (evt) => {
-    if (evt.key === 'Escape') { closeWindow(); return; }
-    if (evt.key !== 'Enter' && evt.key !== ' ') return;
-    const trigger = triggerOf(evt.target);
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const trigger = triggerOf(event.target);
+    if (modalOpen && (!trigger || !dialog.contains?.(trigger))) return;
     if (!trigger) return;
-    evt.preventDefault();
-    lastTrigger = trigger;
-    const key = trigger.getAttribute('data-term');
-    const label = trigger.getAttribute('data-steps');
-    if (key) showTerm(key, [key]);
-    else if (label) showSteps(label);
+    event.preventDefault();
+    activate(trigger);
   });
 
-  return { close: closeWindow, isOpen: () => !!win && !win.hidden };
+  return { close: closeDialog, isOpen: () => !!dialog && !dialog.hidden };
 }

@@ -277,12 +277,6 @@ body {
 
 /* ---------- layout ---------- */
 
-.term-hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 .model-disclosure {
   padding: 0;
   overflow: hidden;
@@ -293,8 +287,8 @@ body {
   align-items: baseline;
   flex-wrap: wrap;
   gap: 8px;
-  min-height: 48px;
-  padding: 14px 16px;
+  min-height: 54px;
+  padding: 17px 20px;
   color: var(--muted);
   cursor: pointer;
   list-style: none;
@@ -310,10 +304,10 @@ body {
 }
 .model-disclosure[open] > .model-summary::before { transform: rotate(90deg); }
 .model-summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
-.model-title { color: var(--ink); font-size: 15px; font-weight: 700; }
-.model-note, .model-count { color: var(--muted); font-size: 12px; }
+.model-title { color: var(--ink); font-size: 16px; font-weight: 700; }
+.model-count { color: var(--muted); font-size: 12px; }
 .model-count { margin-left: auto; font-variant-numeric: tabular-nums; }
-.model-disclosure[open] > .controls { padding: 0 16px 16px; }
+.model-disclosure[open] > .controls { padding: 0 20px 20px; }
 .model-disclosure:not([open]) .model-summary { border-bottom: 0; }
 
 .lab {
@@ -322,9 +316,8 @@ body {
   margin: 0 auto;
   padding: 18px clamp(14px, 2.2vw, 32px) 40px;
   display: grid;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
   grid-template-areas:
-    "hint hint"
     "model results"
     "model beam"
     "model shear"
@@ -335,7 +328,6 @@ body {
   gap: 14px;
 }
 
-.term-hint { grid-area: hint; }
 .model-disclosure { grid-area: model; min-width: 0; }
 .readouts { grid-area: results; min-width: 0; }
 .beam-panel { grid-area: beam; min-width: 0; }
@@ -349,7 +341,7 @@ body {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 14px 16px 12px;
+  padding: 18px 20px 18px;
   box-shadow: var(--panel-shadow);
 }
 
@@ -380,10 +372,29 @@ body {
 .controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 13px;
+  gap: 24px;
 }
 
-.ctl { display: flex; flex-direction: column; gap: 6px; }
+.model-section {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.model-section:last-child { padding-bottom: 0; border-bottom: 0; }
+.model-section-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.setup-grid, .load-editor-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.load-editor-grid { margin-top: 20px; }
+
+.ctl { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
 
 .ctl[hidden] { display: none; }
 
@@ -441,12 +452,11 @@ body {
   outline-offset: 1px;
 }
 
-.hint { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); }
 
 /* ---------- load list (M6) ---------- */
 
 .ctl#ctl-loadlist {
-  grid-column: 1;
+  grid-column: 1 / -1;
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 10px 12px;
@@ -763,7 +773,6 @@ body {
   .lab {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "hint"
       "model"
       "results"
       "beam"
@@ -772,8 +781,9 @@ body {
       "deflection"
       "foot";
   }
-  .controls { grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); }
-  .ctl#ctl-loadlist { grid-column: 1 / -1; }
+  .setup-grid, .load-editor-grid { grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); }
+  .controls { gap: 22px; }
+  .model-section { gap: 14px; }
 }
 
 @media (max-width: 560px) {
@@ -784,16 +794,12 @@ body {
   .topbar { align-items: flex-start; }
   .brand { min-width: 0; }
   .brand h1 { font-size: 16px; }
-  .tagline { font-size: 10.5px; }
   .theme-toggle { padding: 6px 8px; font-size: 11px; }
-  .model-note { display: none; }
   .model-count { margin-left: auto; }
   .load-add-row { flex-direction: column; }
 }
 
-/* ============================ M9 teaching layer ============================
-   Dotted-underline click-to-learn affordance, info chips beside generated
-   labels, and the one teaching popover. */
+/* ============================ teaching layer ============================== */
 
 /* --- triggers: existing elements gain a dotted underline, text unchanged --- */
 
@@ -814,6 +820,13 @@ body {
 div[data-term].panel-heading,
 span[data-term].ctl-label-text {
   display: inline-block;
+}
+.diagram-cue {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 /* --- ℹ info chip beside labels that cannot carry the underline themselves --- */
@@ -839,128 +852,128 @@ span[data-term].ctl-label-text {
 
 .theme-toggle { flex: none; }
 
-/* --- the one teaching popover (fixed position; flips above/below) ---------- */
-
-.popover {
+/* --- centered one-topic teaching dialog ----------------------------------- */
+.teaching-backdrop {
   position: fixed;
+  inset: 0;
   z-index: 60;
-  width: 360px;
-  max-width: calc(100vw - 16px);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: var(--popover-shadow);
-  padding: 10px 12px 12px;
-  color: var(--ink);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(15 23 42 / 48%);
 }
-.popover.is-above { transform: translateY(-100%); }
-
-.popover-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.popover-back {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 2px 4px;
-}
-.popover-back:hover { color: var(--accent); }
-.popover-back:focus-visible, .popover-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.popover-path {
-  flex: 1;
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.popover-close {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  cursor: pointer;
-  padding: 2px 6px;
-}
-.popover-close:hover { color: var(--bad); }
-
-.popover-title {
-  margin: 0 0 4px;
-  font-size: 14px;
-  color: var(--ink);
-}
-.popover-body {
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--ink);
-  white-space: pre-line;
-  max-height: 40vh;
-  overflow-y: auto;
-}
-
-/* --- worked derivations (steps read from the engine's finished result) --- */
-
-.steps-group { margin-bottom: 8px; }
-.steps-group-title {
-  font-size: 11.5px;
-  color: var(--muted);
-  margin-bottom: 4px;
-}
-.steps-row {
+.teaching-backdrop[hidden] { display: none; }
+.teaching-dialog {
+  width: min(760px, 100%);
+  max-height: min(84vh, 880px);
   display: flex;
   flex-direction: column;
-  padding: 5px 6px;
-  margin-bottom: 4px;
-  background: var(--paper);
-  border-left: 3px solid var(--shear);
-  border-radius: 0 4px 4px 0;
-}
-.steps-formula {
-  font-size: 12.5px;
+  overflow: hidden;
   color: var(--ink);
-}
-.steps-sub {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 1px;
-}
-.steps-value {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--status-ok-ink);
-  margin-top: 2px;
-}
-
-/* --- glossary chips inside the window (subs + see-also) ------------------- */
-
-.popover-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 8px;
-}
-.popover-chip {
+  background: var(--panel);
   border: 1px solid var(--line);
-  background: var(--paper);
+  border-radius: 16px;
+  box-shadow: var(--popover-shadow);
+  outline: none;
+}
+.teaching-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 30px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.teaching-title { margin: 0; font-size: clamp(20px, 3vw, 26px); line-height: 1.25; }
+.teaching-close {
+  flex: none;
+  min-height: 40px;
+  padding: 8px 14px;
   color: var(--ink);
-  border-radius: 999px;
-  padding: 2px 9px;
-  font-size: 11px;
+  background: var(--control-bg);
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+  font: inherit;
   cursor: pointer;
 }
-.popover-chip.is-sub { border-color: var(--shear); }
-.subpop-placeholder {
-  font-size: 12px;
-  color: var(--muted);
-  font-style: italic;
-  margin-top: 6px;
+.teaching-close:hover { border-color: var(--accent); }
+.teaching-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.teaching-dialog :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.teaching-body {
+  overflow: auto;
+  padding: 24px 30px 32px;
+  font-size: 16px;
+  line-height: 1.7;
 }
-.subpop-placeholder.hidden { display: none; }
-.popover-chip:hover { border-color: var(--accent); color: var(--accent); }
-.popover-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.teaching-copy { max-width: 66ch; margin: 0; white-space: pre-line; }
+.teaching-intro { margin-bottom: 24px; }
+.worked-given {
+  margin: 0 0 26px;
+  padding: 18px 22px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.worked-given h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.worked-given ul { margin: 0; padding-left: 21px; }
+.worked-steps { margin: 0; padding-left: 30px; }
+.worked-step { padding: 0 0 24px 8px; }
+.worked-step + .worked-step { padding-top: 6px; }
+.worked-step-title { margin: 0 0 7px; font-size: 17px; }
+.worked-step-explanation { margin: 0 0 12px; max-width: 68ch; }
+.worked-equation {
+  width: fit-content;
+  max-width: 100%;
+  margin: 14px 0;
+  padding: 13px 18px;
+  overflow-x: auto;
+  color: var(--ink);
+  background: var(--paper);
+  border-radius: 8px;
+  font-family: Cambria, Georgia, "Times New Roman", serif;
+  font-size: clamp(18px, 3vw, 24px);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.worked-substitution, .worked-value { margin: 6px 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+.worked-answer {
+  width: fit-content;
+  max-width: 100%;
+  margin: 12px 0 0;
+  padding: 11px 16px;
+  color: var(--status-ok-ink);
+  background: var(--status-ok-bg);
+  border: 1px solid var(--status-ok-line);
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-section-title + .setup-grid { margin-top: 2px; }
+.optional-settings { border-top: 1px solid var(--line); padding-top: 12px; }
+.optional-settings > summary { color: var(--muted); font-size: 13px; cursor: pointer; }
+.optional-settings > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.optional-settings-body { display: grid; gap: 10px; margin-top: 13px; }
+.stiffness-section[hidden] { display: none; }
+.foot { padding: 2px 0; font-size: 12px; text-align: left; }
+
+@media (max-width: 980px) {
+  .teaching-backdrop { padding: 14px; }
+  .teaching-dialog { max-height: 90vh; }
+  .teaching-header { padding: 20px 22px 15px; }
+  .teaching-body { padding: 20px 22px 26px; }
+}
+@media (max-width: 560px) {
+  .teaching-backdrop { padding: 8px; }
+  .teaching-dialog { max-height: 94vh; border-radius: 12px; }
+  .teaching-header { gap: 12px; padding: 16px 16px 12px; }
+  .teaching-title { font-size: 20px; }
+  .teaching-close { min-height: 38px; padding: 6px 10px; }
+  .teaching-body { padding: 17px 16px 22px; font-size: 15px; }
+  .worked-given { padding: 14px 16px; }
+  .worked-steps { padding-left: 25px; }
+  .worked-equation { padding: 11px 12px; font-size: 18px; }
+}

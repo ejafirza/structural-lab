@@ -99,7 +99,6 @@ function makeFakeDoc(extraIds = []) {
     querySelector: () => null,
     querySelectorAll: () => [],
   };
-  doc._byId = byId; // exposed for the app-level query machinery in tests
   return doc;
 }
 
@@ -199,7 +198,7 @@ test('handles: one per control point on the SELECTED profile only, with aria lab
   assert.equal(handles.length, 4, 'one handle per control point');
   assert.ok(handles.every((h) => h.attrs['data-point-index'] != null), 'each handle carries its point index');
   assert.ok(
-    handles.some((h) => String(h.attrs['aria-label']).includes('point 3 of 4 — 8 kilonewtons per metre at 3 metres')),
+    handles.some((h) => String(h.attrs['aria-valuetext']).includes('3 metres from support A; 8 kilonewtons per metre downward')),
     'aria names the point, intensity and position'
   );
   // Attribution: the handles live inside load 0's wrapper.
@@ -247,6 +246,10 @@ test('app.js: point table wiring, add/remove/cap, emit rule, profile drag and ke
   const doc = makeFakeDoc(ids);
 
   const svg = doc.getElementById('beam-svg');
+  svg.querySelector = (selector) => {
+    const match = selector.match(/\[data-role="([^"]+)"\]\[data-point-index="(\d+)"\]/);
+    return match ? svg.findAll((node) => node.attrs['data-role'] === match[1] && node.attrs['data-point-index'] === match[2])[0] ?? null : null;
+  };
   svg.createSVGPoint = () => ({ x: 0, y: 0, matrixTransform: () => ({ x: 300, y: 45 }) });
   svg.getScreenCTM = () => ({ inverse: () => ({}) });
   svg.setPointerCapture = () => {};

@@ -18,18 +18,23 @@ node verify/profile-cdp-verify.mjs           # 30 functional checks — M7 profi
 node verify/profile-layout-check.mjs         # 8 layout checks — profile configurations incl. 6-point worst case
 node verify/deflection-cdp-verify.mjs        # 15 functional checks — M8 elastic curve (panel, card, E·I control)
 node verify/deflection-layout-check.mjs      # 8 layout checks — four-panel configurations incl. cantilever & tiny E·I
-node verify/teaching-cdp-verify.mjs          # 22 functional checks — M9 teaching layer (glossary, drill, derivation doors)
-node verify/teaching-layout-check.mjs        # 13 layout checks — 8 SVG configs + popover geometry (360 px incl.)
+node verify/teaching-cdp-verify.mjs          # M11 teaching + layout checks
 node verify/shell-cdp-verify.mjs              # 22 functional checks — M10 theme, disclosure, Results, live edits
-node verify/shell-layout-check.mjs            # 27 layout checks — M10 responsive shell, diagrams, popovers, themes
+node verify/shell-layout-check.mjs            # 27 layout checks — responsive shell, diagrams, centered dialog, themes
 ```
 
-Each script starts `server.js` itself (no need to run `npm start` first), launches
-headless Edge with a remote-debugging port (9336–9350, one per script) and a throwaway
-user-data dir under `verify/tmp/`, drives the UI, asserts DOM state, and fails on any
-console error. Since M6, the harnesses also strip a `PORT` inherited from the outer
-environment (so an outer tool exporting e.g. `PORT=0` cannot rebind the spawned app
-server) and skip internal `edge://` targets when attaching.
+The harnesses launch headless Edge with a remote-debugging port and a user-data dir
+under `verify/tmp/`, drive the UI, assert DOM state, and report browser console errors.
+Most start `server.js` themselves (no need to run `npm start` first); the combined M11
+harness serves the same project files from an in-process HTTP server on an ephemeral
+loopback port. `teaching-browser-session.mjs` owns the Edge/profile and CDP transport;
+`teaching-cdp-verify.mjs` contains serial assertions. It uses one Edge process and one
+unique profile, removed only after Edge exit and CDP shutdown are confirmed. If shutdown
+is uncertain, the profile is retained. One M11 run passed all 46 product assertions with
+no console errors, then hit `EBUSY` during cleanup. Bounded retries were added afterward
+but not browser-rerun; `verify/tmp/` is currently empty. M5–M10 browser regressions remain
+pending. Since M6, spawned servers strip inherited `PORT`; CDP harnesses skip `edge://`
+targets when attaching.
 
 ## Requirements
 
@@ -107,24 +112,33 @@ the asserted values and counts are unchanged.
   placeholder, drop the card, and hide the E·I control.
 - Layout: no clipping / collisions across all FOUR panels in 8 configurations
 
-## What they assert (teaching pair — M9)
+## What it asserts (combined teaching + layout run — M11 redesign)
 
-- ℹ chips and underlined terms open the right glossary entry; the window is
-  a non-modal `role="dialog"`; Escape closes; chips drill two levels with a
-  working breadcrumb and back button.
-- **Content honesty in the browser**: pin teaches 2 reactions, fixed 3 (with
-  the moment reaction, not torsion); the equilibrium badge explains the
-  self-check.
-- **Derivation doors quote the cards verbatim**: the Mmax card's popover
-  shows `P·a·b / L` steps with 15 kNm for the default beam and 9 kNm (wL²/8)
-  for the full UDL — the hand anchors, read from the result.
-- Indeterminate beams swap doors: `data-term` explainers ("why it is not
-  solved"), no derivations.
-- Popover geometry: opens fully inside the viewport, never covers its
-  trigger, respects a 360 px viewport, body scrollable for long entries.
-- Layout: the full four-panel audit stays clean in all 8 configurations
-  (default, UDL, cantilever, stepped profile, mixed, long span, tiny E·I,
-  indeterminate).
+**Current evidence:** one combined M11 run passed **46/46 product checks** on this
+worktree with zero browser console/runtime errors. Its separate profile-cleanup check
+failed once with `EBUSY`; bounded retry logic was added but has not been browser-rerun.
+The owned temp profile was removed after confirming no process referenced it, and
+`verify/tmp/` is currently empty.
+
+- ℹ buttons and underlined terms open one centered, single-topic accessible dialog only
+  after activation; no related-topic chips or breadcrumb navigation. Space/Enter,
+  real-browser Tab and Shift+Tab focus-loop behavior, Escape, backdrop close,
+  focus/`aria-expanded` restoration, and full-page background inertness are checked.
+- **Content honesty:** pin teaches 2 reactions and fixed teaches 3; the equilibrium badge
+  explains its self-check. Unsolved beams explain why without opening fabricated
+  derivations.
+- **Worked-result provenance:** the default point-load reaction/Mmax explanations retain
+  their valid equations, substitutions and engine results; full-span UDL retains the
+  `w·L² / 8` equation and 9 kNm result. Centered-load deflection uses its valid textbook
+  equation; off-center load uses the integration method. A point + stepped-profile case
+  checks actual given inputs, method and final engine outputs without fabricated numeric
+  intermediates.
+- E·I remains available after selecting a point or distributed load; unsolved state,
+  equilibrium accessibility and concise teaching cues are verified.
+- Dialog geometry is checked centered and within desktop and 360 px viewports; its
+  content region must support scrolling when needed. The four-panel SVG clipping/collision
+  audit ran across all 8 configurations and passed in the recorded combined M11 run.
+  The cleanup retry remains unverified; M5–M10 browser regressions are still pending.
 
 ## What they assert (shell pair — M10)
 
@@ -146,8 +160,8 @@ the asserted values and counts are unchanged.
   they stack in reading order. Tested widths: 1440, 1024, 980, 768, 560 and 390 px.
 - No page-wide horizontal scrolling; all four diagrams, their labels, and crowded
   multi-load/profile and cantilever examples remain visible.
-- The moved equilibrium and determinacy explanations fit on desktop and phone without
-  covering their trigger. Dark diagram labels/marker halos match the dark surface.
+- The centered equilibrium and determinacy dialogs fit desktop and phone viewports and
+  make the full background inert. Dark diagram labels/marker halos match the dark surface.
 - Normal text contrast checks exceed 4.5:1 in both palettes: light primary/muted/status
   13.65/4.76/6.81:1; dark 16.19/9.89/7.52:1.
 - No browser errors or exceptions during the checks.

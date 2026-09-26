@@ -115,15 +115,16 @@ try {
     await sleep(900);
   }
 
-  // A trigger in Results and the relocated badge both open inside the viewport on desktop and phone.
+  // A trigger in Results and the relocated badge both open centered within the viewport on desktop and phone.
   for (const width of [1440, 390]) {
     await setViewport(width, 900);
     for (const trigger of ['#eq-badge', '[data-term="determinacy"]']) {
       await evaluate(`document.querySelector(${JSON.stringify(trigger)}).scrollIntoView({block:'center'})`);
       await evaluate(`document.querySelector(${JSON.stringify(trigger)}).click()`);
       await sleep(120);
-      const pop = await evaluate(`(() => { const p=document.querySelector('.popover'),t=document.querySelector(${JSON.stringify(trigger)}); const r=p.getBoundingClientRect(),q=t.getBoundingClientRect(); return {inside:r.left>=0&&r.top>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1,overlap:Math.min(r.right,q.right)-Math.max(r.left,q.left)>1&&Math.min(r.bottom,q.bottom)-Math.max(r.top,q.top)>1}; })()`);
-      check(`${width}px: ${trigger} explanation fits and avoids its trigger`, pop.inside && !pop.overlap, JSON.stringify(pop));
+      const pop = await evaluate(`(() => { const p=document.querySelector('.teaching-dialog'); const r=p.getBoundingClientRect(); const vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight; return {inside:r.left>=0&&r.top>=0&&r.right<=vw+1&&r.bottom<=vh+1,centerX:Math.abs((r.left+r.right)/2-vw/2)<2,centerY:Math.abs((r.top+r.bottom)/2-vh/2)<2,modal:p.getAttribute('aria-modal')==='true'}; })()`);
+      const backgroundInert = await evaluate(`[...document.body.children].filter(node => node !== document.querySelector('.teaching-backdrop')).every(node => node.inert)`);
+      check(`${width}px: ${trigger} modal is centered, fits and inerts the background`, pop.inside && pop.centerX && pop.centerY && pop.modal && backgroundInert, JSON.stringify({ ...pop, backgroundInert }));
       await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
     }
   }

@@ -87,13 +87,13 @@ test('the UI references only dictionary entries (annotation rule, forward direct
   }
 });
 
-test('SVG touchpoints: exactly the planned six, all resolvable (budget ≤ 8)', () => {
+test('SVG touchpoints: the planned topics remain resolvable (budget ≤ 8)', () => {
   const renderSrc = read('../ui/renderm3.js');
   const svgTerms = [...renderSrc.matchAll(/'data-term':\s*'([a-z0-9-]+)'/g)].map((m) => m[1]);
   assert.ok(svgTerms.length <= 8, `SVG touchpoint budget blown: ${svgTerms.length} > 8`);
   assert.deepEqual([...new Set(svgTerms)].sort(),
-    ['centroid', 'exaggeration', 'max-deflection', 'maximum-moment', 'moment-reaction', 'vertical-reaction'],
-    'the SVG touchpoints are exactly the planned six');
+    ['centroid', 'exaggeration', 'max-deflection', 'maximum-moment', 'moment-reaction', 'supports', 'vertical-reaction'],
+    'the SVG teaching topics remain within the planned budget');
   for (const t of svgTerms) assert.ok(hasTerm(t), `SVG term "${t}" missing from the dictionary`);
 });
 

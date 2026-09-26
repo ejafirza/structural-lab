@@ -40,7 +40,7 @@ const { renderM3 } = await import('../ui/renderm3.js');
 test('desktop shell uses named two-column areas and stacks in a mobile reading order', () => {
   const html = read('../ui/index.html');
   const css = read('../ui/style.css');
-  assert.match(css, /grid-template-columns:\s*minmax\(280px,\s*340px\)\s+minmax\(0,\s*1fr\)/);
+  assert.match(css, /grid-template-columns:\s*minmax\(320px,\s*390px\)\s+minmax\(0,\s*1fr\)/);
   assert.match(css, /"model results"[\s\S]*"model beam"[\s\S]*"model shear"[\s\S]*"model moment"[\s\S]*"model deflection"/);
   assert.match(css, /@media\s*\(max-width:\s*980px\)/);
   assert.match(css, /"model"[\s\S]*"results"[\s\S]*"beam"[\s\S]*"shear"[\s\S]*"moment"[\s\S]*"deflection"/);
@@ -53,7 +53,7 @@ test('Model is an open native disclosure and existing controls are still inside 
   assert.match(html, /<details id="model-panel"[^>]*open/);
   assert.match(html, /<summary class="model-summary">[\s\S]*id="load-count"/);
   const start = html.indexOf('<details id="model-panel"');
-  const end = html.indexOf('</details>', start);
+  const end = html.lastIndexOf('</details>', html.indexOf('<section class="panel readouts"'));
   const disclosure = html.slice(start, end);
   for (const id of ['load-list', 'num-span', 'num-load', 'num-pos', 'num-ei', 'sel-support-left', 'sel-support-right', 'point-table', 'btn-add-point', 'btn-add-distributed']) {
     assert.ok(disclosure.includes(`id="${id}"`), `${id} remains in the Model disclosure`);
@@ -81,11 +81,15 @@ test('theme logic is isolated from beam state and storage contains only the appe
   assert.ok(app.includes('initTheme(document)'));
 });
 
-test('M10 label trim keeps units, sign conventions, true deflection scale and disclaimer', () => {
+test('M11 reduces repeated copy but keeps essential units, sign conventions and the concise disclaimer', () => {
   const html = read('../ui/index.html');
-  for (const text of ['positive plots up', 'sagging (+) below, hogging (−) above', 'Shape exaggerated; true value shown', 'Educational tool — not a professional design-verification system', 'ΣFx = 0', 'ΣFy = 0', 'ΣM = 0']) {
-    assert.ok(html.includes(text), `key academic explanation retained: ${text}`);
+  for (const text of ['kN · positive plots up', 'kN·m · sagging (+) below, hogging (−) above', 'Shape exaggerated; true value shown', 'For learning only—not for structural design verification.']) {
+    assert.ok(html.includes(text), `essential academic cue retained: ${text}`);
   }
+  assert.ok(!html.includes('A simple visual lab for learning structural analysis.'), 'remove the redundant tagline');
+  assert.ok(!html.includes('Hover or click any dotted term for a hand-written explanation.'), 'remove repeated teaching instructions');
+  assert.ok(!html.includes('Educational tool — not a professional design-verification system'), 'keep only the approved concise disclaimer');
+  assert.ok(!html.includes('Engine equilibrium self-check'), 'the badge is concise; the topic explanation is available on demand');
   const { doc } = renderReferencePointBeam();
   const renderedLabels = doc.getElementById('result-cards').children
     .map((card) => card.children.find((child) => child.className === 'card-label').textContent);
@@ -119,7 +123,8 @@ test('M3 still displays the same engine results and result-card labels after she
   const values = cards.map((card) => card.children.find((child) => child.className === 'card-value').textContent);
   assert.deepEqual(labels, ['Reaction HA', 'Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection']);
   assert.deepEqual(values, ['0 kN', '5 kN', '5 kN', '15 kNm', `${fmt(result.deflection.max.value * 1000)} mm`]);
-  assert.ok(doc.getElementById('eq-badge').textContent.includes('Engine equilibrium self-check'));
+  assert.equal(doc.getElementById('eq-badge').textContent, 'Balanced ✓');
+  assert.equal(doc.getElementById('eq-badge').getAttribute('aria-label'), 'Balanced. Activate to inspect the equilibrium residuals.');
   const texts = doc.getElementById('beam-svg').findAll((n) => n.nodeName === 'text').map((n) => n.textContent);
   assert.ok(texts.some((text) => text.includes('P = 10 kN')));
 });

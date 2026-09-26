@@ -85,31 +85,23 @@ civil/structural engineering students, built around the loop
     sagging beam deflects downward); EI·v″ = −M in this convention.
   - Honesty unchanged: determinate beams only; indeterminate/unstable keep
     the placeholder and hide the E·I control.
-- **Milestone 10 — complete**: a simpler, responsive app shell for the academic
-  visual lab. Desktop uses a Model column beside the Results and diagrams; narrow
-  screens stack them in reading order. The Model editor folds without losing values,
-  appearance can follow System or be set to Light/Dark, and the equilibrium check is
-  beside the other Results. Existing calculations and explanations are unchanged.
-- Roadmap after M10: future AI tutor layer; the current lab remains useful on its own.
-
-## Teaching layer (M9)
-
-- **Every underlined term explains itself.** Click any dotted-underlined term
-  (Loads, Shear force V(x), Bending moment M(x), Deflected shape v(x), units,
-  the determinacy badge, the equilibrium badge) or any ℹ mark (supports,
-  E·I, stiffness presets) and a small popover opens with a plain-language
-  explanation — hand-written, no AI. Inside a window, sub-concepts are
-  clickable chips with a breadcrumb (Supports › Pin support › Vertical
-  reaction), so nothing is more than a click away; Escape or click-outside
-  closes.
-- **Every result card is a "how?" door.** Click a reactions / max-moment /
-  max-deflection card to see the step-by-step derivation with the engine's
-  own numbers (`Mmax = P·a·b / L → 15 kNm`). The steps are read from the
-  finished result — never recomputed — and a test enforces that identity.
-  Indeterminate beams get the classification explanation instead: the tool
-  explains why it refuses, never invents numbers.
-- New modules: `src/glossary.js` (the dictionary), `src/explain.js` (the
-  derivation formatter), `ui/popover.js` (the one-window component).
+- **Milestone 10 — complete**: responsive app shell, foldable Model editor, System/Light/
+  Dark preference, and the equilibrium check beside Results. The M10 checkpoint was
+  committed and pushed separately; it changed no calculations.
+- **Milestone 11 — implementation in progress**: minimalist hierarchy and spacing,
+  concise copy, optional preset disclosures, and a centered accessible one-topic teaching
+  dialog are implemented. The dialog opens only on activation, inerts the whole page
+  background, traps focus and restores focus/state on close. E·I stays visible for every
+  determinate load kind; final verification remains pending.
+- **Teaching layer (M9, redesigned in M11):** activate a marked term or info button to
+  read its hand-written explanation; activate a result card for a worked explanation.
+  There are no nested topic chips or breadcrumbs. Standard cases show valid equations
+  and substitutions. Mixed/profile cases show actual inputs and method, with engine
+  outputs kept distinct from the method—no fabricated intermediate values. Unsolved
+  beams explain why without inventing results.
+- New teaching modules remain `src/glossary.js` (dictionary), `src/explain.js` (formatter
+  over completed results) and `ui/popover.js` (reusable accessible dialog).
+- Roadmap after M11: future AI tutor layer; the current lab remains useful on its own.
 
 ## Application shell (M10)
 
@@ -133,21 +125,21 @@ Requires Node.js ≥ 18. Zero dependencies, no install step.
 
 ```bash
 npm start      # start the app → http://localhost:8000 (browser opens)
-npm test       # run the full automated suite (180 tests)
+npm test       # run the full automated suite
 npm run demo   # ASCII text demo of the engine (Milestone 1)
 ```
 
 > ⚠️ Open the app via `npm start`, not by double-clicking `ui/index.html` —
 > browsers block ES-module imports over `file://`.
 
-**Testing & quality:** 180 automated tests (`npm test`, Node's built-in runner —
-analytical cases with independently known textbook values, render checks, shell and
-theme checks, and source guards proving the UI contains no engineering formulas), plus
-12 headless-browser verification harnesses in [`verify/`](verify/readme.md). Together
-these cover working controls, explanations, themes and layouts from desktop to phone;
-they check for visible layout problems and browser errors. CI runs the unit suite on
-Node 20 and 22 against a case-sensitive filesystem. Educational tool — **not** a
-professional design-verification system.
+**Testing & quality:** Node's built-in test suite (`npm test`) covers analytical cases
+with independently known textbook values, rendering, accessible teaching, shell/theme
+checks, and source guards proving the UI contains no engineering formulas. The browser suite in [`verify/`](verify/readme.md) covers controls, calculations, dialogs,
+themes and responsive layouts. One M11 run passed all 46 product checks with no console
+errors; profile cleanup then failed once with `EBUSY`. Bounded retries were added but
+not browser-rerun. M5–M10 browser regressions remain pending; `verify/tmp/` is currently
+empty. CI runs the unit suite on Node 20 and 22 against a case-sensitive filesystem.
+Educational tool — **not** a professional design-verification system.
 
 ## License
 
@@ -193,17 +185,18 @@ src/analysis.js      analyzeBeam() dispatcher: point/UDL/linear solvers + combin
 src/glossary.js      M9 teaching dictionary — hand-written explanations (pure data)
 src/explain.js       M9 derivation formatter over finished results (reads, never recomputes)
 src/demo.js          ASCII demo of the engine (M1)
-ui/index.html        responsive shell (M10), model controls (load list since M6,
-                     shape-point table since M7, E·I since M8), teaching triggers (M9)
+ui/index.html        responsive shell (M10), minimalist hierarchy/copy (M11), model
+                     controls (load list M6, shape-point table M7, E·I M8), teaching triggers (M9/M11)
 ui/app.js            state + input wiring + engine adapter (ONLY importer of the engine;
-                     M7: point-list internal model, shape-point table, profile handles;
-                     M10: appearance boot + load-count summary)
+                     M7: point-list internal model and handles; M10: theme/load count;
+                     M11: beam-level stiffness visibility + one-group card routing)
 ui/theme.js          M10 System / Light / Dark preference (presentation only)
-ui/popover.js        M9 one-window teaching popover (breadcrumb, a11y, viewport fit)
+ui/popover.js        M11 centered one-topic dialog (a11y, inert background, focus lifecycle)
 ui/render.js         M2 reference renderers (simply supported point load) — FROZEN
-ui/renderm3.js       support- & load-aware renderers (multi-load M6, profile band +
-                     per-point handles M7, deflection panel M8, theme tokens M10)
-ui/style.css         layout + light/dark semantic colors (M10)
+ui/renderm3.js       support/load renderers (multi-load M6, profile M7, deflection M8,
+                     theme tokens M10, concise status + accessible diagram triggers M11)
+ui/style.css         responsive layout + light/dark colors (M10), minimalist shell and
+                     centered teaching dialog (M11)
 server.js            zero-dependency static server (Node http module)
 test/engine.test.js        M1 analytical (9)
 test/ui-smoke.test.js      M2 render (5)
@@ -223,13 +216,13 @@ test/ui-m7.test.js         M7 render + emit rule + point-table interaction (5)
 test/deflection.test.js    M8 elastic curve — Cases A–L (12)
 test/ui-m8.test.js         M8 deflection panel + E·I wiring (4)
 test/glossary.test.js      M9 teaching-dictionary integrity (6)
-test/explain.test.js       M9 derivation identity + honesty (9)
-test/ui-m9.test.js         M9 card doors + popover behaviour (8)
+test/explain.test.js       M11 derivation identity + honesty (9)
+test/ui-m9.test.js         M11 card routing + one-topic modal behavior (7)
 test/theme.test.js         M10 appearance preference behavior (6)
 test/ui-m10.test.js        M10 shell, content and frozen-boundary contracts (7)
 docs/                original owner briefs (v1 product brief + M2 UI brief)
 verify/              browser-level CDP verification harnesses (see verify/readme.md)
-plan-m4.md … plan-m9.md   milestone plans (the plan-before-code record)
+plan-m4.md … plan-m11.md milestone plans (the plan-before-code record)
 ```
 
 > **Filename-casing note:** on-disk filenames and ES-module import specifiers
@@ -339,9 +332,9 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
 
 ## Testing & verification
 
-- `npm test` runs **180 tests**: 167 M1–M9 regression checks + 6 M10 theme
-  preference checks + 7 M10 shell/presentation checks. Existing analytical values,
-  explanations, and renderer boundaries remain covered.
+- `npm test` runs the analytical, rendering, theme, shell and M11
+  explanation/accessibility coverage. See the current test run before treating the suite
+  as green; engineering regression tests remain included.
 - **M7 solver coverage**: stepped profile with an interior peak, collinear
   profile ≡ frozen linear solver to 1e-9, gap profile with the `V ≡ 0`
   plateau, both cantilevers, honesty (indeterminate/unstable), validation
@@ -357,32 +350,16 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
   order independence, 1/EI linearity, honesty (no block when not solved),
   EI validation + default, derivative identities (dθ/dx = −M/EI,
   d²v/dx² = −M/EI on clean stencils), and pure-add-on determinism.
-- **M9 teaching-layer coverage**: glossary integrity (no dead links, no
-  orphans, size caps, the exact SVG touchpoint set, pin = 2 / roller = 1 /
-  fixed = 3 reactions stated correctly); derivation identity (every step's
-  value traces to the engine result — the one allowed transformation is the
-  m → mm unit conversion; classification-only honesty for unsolved beams;
-  no result mutation); popover behaviour (single window, breadcrumb drill,
-  Escape/click-outside, aria-expanded, no innerHTML, fail-soft unknowns).
-- **Browser-level verification** (headless Edge via CDP): consolidation
-  harnesses (32 functional checks, 6 layout checks — the M5 regression
-  anchors) + multi-load harnesses (22 functional checks: add/select/remove,
-  combined resultant, cap enforcement, honesty, plus the M6.5 synthesized
-  pointer-drag regression on the load arrow and a region handle; 6 multi-load layout
-  configurations) + profile harnesses (30 functional checks: presets, point
-  table, hand-derived stepped numbers, drag/keyboard handles, emit-rule
-  regression, honesty, cap; 8 layout configurations including the 6-point
-  worst case) + deflection harnesses (15 functional checks: panel + card
-  hand values, E·I chips/slider/field, cantilever tip, honesty, EI
-  persistence; 8 four-panel layout configurations) + teaching harnesses
-  (22 functional checks: chip → glossary entry, two-level drill with
-  breadcrumb + back, Escape close, derivation doors quoting the cards' own
-  numbers verbatim — 15 kNm point / 9 kNm UDL anchors — equilibrium badge,
-  honesty doors for pin+pin, viewport fit; 13 layout checks: the 8 standard
-  SVG configurations + popover viewport fit, trigger overlap, 360 px flip,
-  scrollable body), plus M10 shell/theme checks (22 functional, 27 layout). All 12
-  browser harnesses are listed in [`verify/`](verify/readme.md); each starts the
-  server itself and checks for browser errors.
+- **M9/M11 teaching coverage**: glossary integrity (no dead links, no orphans, size caps,
+  SVG touchpoints and support reaction counts); derivation identity (answers trace to
+  engine results except the m → mm conversion; no invented intermediate numbers,
+  honest unsolved states and no result mutation); one-topic modal behavior (activation
+  only, keyboard operation, focus/inert restoration, no innerHTML, fail-soft unknowns).
+- **Browser-level verification** (headless Edge via CDP): prior milestone totals are
+  listed in `verify/readme.md`. M11's combined one-Edge run passed 46/46 product checks
+  with no console errors; its separate profile-cleanup assertion failed once with
+  `EBUSY`. Cleanup retries were added but not browser-rerun. M5–M10 browser regressions
+  remain pending; `verify/tmp/` is currently empty.
 
 ## Educational disclaimer
 

@@ -1,259 +1,255 @@
 /**
- * ui-m9.test.js — UI tests for the M9 teaching layer (fake-DOM pattern).
- * -------------------------------------------------------------
- *   1. renderm3.js: solved cards carry data-steps doors; unsolved cards carry
- *      data-term doors; card LABEL text stays byte-identical to pre-M9
- *      (the annotation rule); SVG labels carry the planned data-terms.
- *   2. popover.js against a fake DOM: open on click, drill + breadcrumb,
- *      Escape close, one window only, aria-expanded tracking, content built
- *      without innerHTML.
- *   3. The deflection-panel lesson: popover init is optional in fake DOMs —
- *      app.js boots cleanly without document.addEventListener.
+ * ui-m9.test.js — result routing and accessible one-topic teaching dialog.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { analyzeBeam } from '../src/analysis.js';
-import { fmt } from '../ui/render.js';
 import { getTerm } from '../src/glossary.js';
 
-// --- minimal DOM shim (same pattern as ui-m7/ui-m8) --------------------------
-
 class FakeNode {
-  constructor(name) {
+  constructor(name, doc) {
     this.nodeName = name;
+    this.ownerDocument = doc;
     this.children = [];
     this.attrs = {};
-    this._text = '';
+    this.listeners = {};
     this.className = '';
     this.hidden = false;
-    this.dataset = {};
-    this.value = '';
+    this.inert = false;
     this.disabled = false;
-    this.title = '';
-    this.style = {};
-    this.listeners = {};
+    this._text = '';
+    this.parentNode = null;
     this.parentElement = null;
   }
-  setAttribute(k, v) { this.attrs[k] = String(v); }
-  getAttribute(k) { return this.attrs[k]; }
-  append(...nodes) { for (const n of nodes) { this.children.push(n); n.parentElement = this; } }
-  replaceChildren(...nodes) { for (const n of this.children) n.parentElement = null; this.children = [...nodes]; for (const n of nodes) n.parentElement = this; }
-  addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); }
-  click() { for (const fn of this.listeners.click ?? []) fn({ target: this, preventDefault() {}, stopPropagation() {} }); }
-  dispatchEvent(evt) { for (const fn of this.listeners[evt.type] ?? []) fn(evt); return true; }
-  closest() { return null; }
-  querySelector() { return null; }
-  querySelectorAll() { return []; }
-  focus() {}
-  getBoundingClientRect() { return { left: 200, top: 200, right: 300, bottom: 240, width: 100, height: 40 }; }
-  set textContent(v) { this._text = String(v); }
-  get textContent() { return this._text; }
+  setAttribute(name, value) { this.attrs[name] = String(value); }
+  getAttribute(name) { return this.attrs[name] ?? null; }
+  append(...nodes) {
+    for (const node of nodes) {
+      node.parentNode = node.parentElement = this;
+      node.ownerDocument = this.ownerDocument;
+      this.children.push(node);
+    }
+  }
+  replaceChildren(...nodes) {
+    for (const node of this.children) node.parentNode = node.parentElement = null;
+    this.children = [];
+    this._text = '';
+    this.append(...nodes);
+  }
+  addEventListener(type, listener) { (this.listeners[type] ??= []).push(listener); }
+  dispatchEvent(event) {
+    event.target ??= this;
+    event.preventDefault ??= () => { event.defaultPrevented = true; };
+    event.stopPropagation ??= () => { event.cancelBubble = true; };
+    for (let node = this; node; node = node.parentNode) {
+      for (const listener of node.listeners?.[event.type] ?? []) listener(event);
+      if (event.cancelBubble) break;
+    }
+    if (!event.cancelBubble) {
+      for (const listener of this.ownerDocument?.listeners?.[event.type] ?? []) listener(event);
+    }
+    return true;
+  }
+  click() { this.dispatchEvent({ type: 'click' }); }
+  contains(target) { return target === this || this.children.some((child) => child.contains(target)); }
+  querySelectorAll(selector) {
+    const matches = (node) => selector.split(',').some((part) => {
+      const s = part.trim();
+      if (s.startsWith('button')) return node.nodeName === 'button' && !node.disabled;
+      if (s.startsWith('a[href]')) return node.nodeName === 'a' && node.attrs.href;
+      if (s.startsWith('input')) return node.nodeName === 'input' && !node.disabled;
+      return s.startsWith('[tabindex]') && node.attrs.tabindex != null && node.attrs.tabindex !== '-1';
+    });
+    return this.findAll(matches).filter((node) => node !== this);
+  }
+  querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
+  focus() { if (this.ownerDocument) this.ownerDocument.activeElement = this; }
+  set textContent(value) {
+    this.replaceChildren();
+    this._text = String(value);
+  }
+  get textContent() { return this._text + this.children.map((child) => child.textContent).join(''); }
   get classList() {
-    const self = this;
+    const node = this;
+    const values = () => new Set(node.className.split(/\s+/).filter(Boolean));
     return {
-      toggle(cls, on) {
-        const set = new Set(String(self.className).split(' ').filter(Boolean));
-        if (on === undefined) { set.has(cls) ? set.delete(cls) : set.add(cls); }
-        else if (on) set.add(cls); else set.delete(cls);
-        self.className = [...set].join(' ');
+      contains(name) { return values().has(name); },
+      toggle(name, force) {
+        const set = values();
+        if (force === undefined ? !set.has(name) : force) set.add(name);
+        else set.delete(name);
+        node.className = [...set].join(' ');
       },
-      add(cls) { this.toggle(cls, true); },
-      remove(cls) { this.toggle(cls, false); },
-      contains(cls) { return String(self.className).split(' ').includes(cls); },
+      add(name) { this.toggle(name, true); },
+      remove(name) { this.toggle(name, false); },
     };
   }
-  findAll(pred, out = []) {
-    if (pred(this)) out.push(this);
-    for (const c of this.children) c.findAll(pred, out);
-    return out;
+  findAll(predicate, found = []) {
+    if (predicate(this)) found.push(this);
+    for (const child of this.children) child.findAll(predicate, found);
+    return found;
   }
 }
 
 function makeFakeDoc() {
-  const ids = ['beam-svg', 'sfd-svg', 'bmd-svg', 'defl-svg', 'det-badge', 'class-note', 'result-cards', 'eq-badge'];
-  const byId = Object.fromEntries(ids.map((id) => [id, new FakeNode('div')]));
   const doc = {
-    getElementById: (id) => byId[id],
-    createElementNS: (_ns, name) => new FakeNode(name),
-    createElement: (name) => new FakeNode(name),
-    body: new FakeNode('body'),
-    documentElement: new FakeNode('html'),
-    querySelector: () => null,
-    querySelectorAll: () => [],
+    listeners: {},
+    activeElement: null,
+    addEventListener(type, listener) { (this.listeners[type] ??= []).push(listener); },
+    createElement(name) { return new FakeNode(name, this); },
+    createElementNS(_namespace, name) { return new FakeNode(name, this); },
+    dispatch(type, event) {
+      event.type = type;
+      event.target ??= this;
+      event.preventDefault ??= () => { event.defaultPrevented = true; };
+      for (const listener of this.listeners[type] ?? []) listener(event);
+    },
   };
-  doc._byId = byId;
+  doc.body = new FakeNode('body', doc);
+  doc.documentElement = new FakeNode('html', doc);
+  const ids = ['beam-svg', 'sfd-svg', 'bmd-svg', 'defl-svg', 'det-badge', 'class-note', 'result-cards', 'eq-badge', 'lab-content'];
+  const elements = Object.fromEntries(ids.map((id) => [id, new FakeNode('div', doc)]));
+  const topbar = new FakeNode('header', doc);
+  doc.body.append(topbar, elements['lab-content']);
+  elements['lab-content'].inert = false;
+  doc.getElementById = (id) => elements[id] ?? null;
+  doc.querySelector = (selector) => selector === '.topbar' ? topbar : null;
+  doc._elements = elements;
+  doc._topbar = topbar;
   return doc;
 }
 
-globalThis.document = makeFakeDoc();
 const { renderM3 } = await import('../ui/renderm3.js');
 const { initTeachingPopover } = await import('../ui/popover.js');
-
 const pinRoller = { left: 'pin', right: 'roller' };
 
-function boot(input, stateExtras = {}) {
+function boot(input) {
   const result = analyzeBeam(input);
   const doc = makeFakeDoc();
-  renderM3(doc, { span: input.span, selectedLoad: 0, supports: input.supports, ...stateExtras }, result);
+  globalThis.document = doc;
+  renderM3(doc, { span: input.span, selectedLoad: 0, supports: input.supports }, result);
   return { doc, result };
 }
 
-// --- 1. the card doors --------------------------------------------------------
+const providers = { getGlossary: getTerm, getSteps: () => null };
+const findByClass = (root, name) => root.findAll((node) => node.classList.contains(name))[0] ?? null;
 
-test('solved cards carry data-steps doors; label text is byte-identical to pre-M9', () => {
-  const { doc } = boot({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 3 }], supports: pinRoller });
-  const cards = [...doc.getElementById('result-cards').children];
-  assert.equal(cards.length, 5, '2 reactions + Mmax + deflection + second reaction');
-  const labels = cards.map((c) => c.children.find((n) => n.className === 'card-label').textContent);
-  assert.deepEqual(labels, ['Reaction HA', 'Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection'],
-    'card labels unchanged by M9 (the annotation rule; HA-first is the pre-M9 order)');
-  for (const c of cards) {
-    assert.ok(c.getAttribute('data-steps'), 'every solved card is a derivation door');
-    assert.equal(c.getAttribute('tabindex'), '0');
-    assert.equal(c.getAttribute('role'), 'button');
-  }
+test('solved result cards retain labels and expose their own teaching routes', () => {
+  const { doc, result } = boot({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 3 }], supports: pinRoller });
+  const cards = doc.getElementById('result-cards').children;
+  const labels = cards.map((card) => card.children.find((node) => node.className === 'card-label').textContent);
+  assert.deepEqual(labels, ['Reaction HA', 'Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection']);
+  assert.deepEqual(cards.map((card) => card.getAttribute('data-steps')), labels);
+  assert.ok(cards.every((card) => card.getAttribute('tabindex') === '0' && card.getAttribute('role') === 'button'));
+  assert.equal(result.reactions.left.Hx, 0);
 });
 
-test('unsolved cards carry a data-term door explaining why, with unchanged labels', () => {
+test('unsolved cards and equilibrium status remain honest and accessible', () => {
+
   const { doc } = boot({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 3 }], supports: { left: 'pin', right: 'pin' } });
-  const cards = [...doc.getElementById('result-cards').children];
+  const cards = doc.getElementById('result-cards').children;
   assert.equal(cards.length, 2);
-  for (const c of cards) {
-    assert.equal(c.getAttribute('data-term'), 'statically-indeterminate');
-    const label = c.children.find((n) => n.className === 'card-label').textContent;
-    assert.ok(['Reactions', 'Max bending moment'].includes(label), 'label unchanged');
-    const sub = c.children.find((n) => n.className === 'card-sub');
-    assert.ok(sub && sub.textContent.includes('not solved by statics'), 'honesty sub preserved');
-  }
+  assert.ok(cards.every((card) => card.getAttribute('data-term') === 'statically-indeterminate'));
+  assert.equal(doc.getElementById('eq-badge').textContent, 'Not solved');
+  assert.equal(doc.getElementById('eq-badge').getAttribute('tabindex'), '-1');  assert.match(doc.getElementById('eq-badge').getAttribute('aria-label'), /no equilibrium residuals/);
 });
 
-test('SVG labels carry exactly the planned data-terms', () => {
+test('visible SVG terms and equilibrium control retain teaching cues', () => {
+
   const { doc } = boot({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 3 }], supports: pinRoller });
-  const terms = doc.getElementById('beam-svg').findAll((n) => n.attrs['data-term']).map((n) => n.attrs['data-term']);
-  assert.deepEqual([...new Set(terms)], ['vertical-reaction'],
-    'lone point load: reaction label only (the combined R/x̄ is deliberately suppressed for a lone point load — pre-M6 rule)');
-  // A distributed load draws the combined resultant → the centroid term appears.
-  const { doc: docU } = boot({ span: 6, loads: [{ type: 'udl', intensity: 2 }], supports: pinRoller });
-  const udlTerms = docU.getElementById('beam-svg').findAll((n) => n.attrs['data-term']).map((n) => n.attrs['data-term']);
-  assert.deepEqual([...new Set(udlTerms)].sort(), ['centroid', 'vertical-reaction'], 'UDL beam: resultant centroid + reaction terms');
-  const bmdTerms = doc.getElementById('bmd-svg').findAll((n) => n.attrs['data-term']).map((n) => n.attrs['data-term']);
-  assert.deepEqual([...new Set(bmdTerms)], ['maximum-moment']);
-  const deflTerms = doc.getElementById('defl-svg').findAll((n) => n.attrs['data-term']).map((n) => n.attrs['data-term']);
-  assert.deepEqual([...new Set(deflTerms)].sort(), ['exaggeration', 'max-deflection']);
-  // Cantilever adds the wall-moment arrow term.
-  const { doc: doc2 } = boot({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 3 }], supports: { left: 'fixed', right: 'free' } });
-  const beamTerms = doc2.getElementById('beam-svg').findAll((n) => n.attrs['data-term']).map((n) => n.attrs['data-term']);
-  assert.ok(beamTerms.includes('moment-reaction'), 'cantilever wall moment teaches the moment reaction');
+  const terms = (id) => doc.getElementById(id).findAll((node) => node.attrs['data-term']).map((node) => node.attrs['data-term']);
+  assert.ok(terms('beam-svg').includes('point-load'));
+  assert.ok(terms('beam-svg').includes('supports'));
+  assert.ok(terms('beam-svg').includes('vertical-reaction'));
+  assert.deepEqual([...new Set(terms('bmd-svg'))], ['maximum-moment']);
+  assert.deepEqual([...new Set(terms('defl-svg'))].sort(), ['exaggeration', 'max-deflection']);
+  assert.equal(doc.getElementById('eq-badge').getAttribute('aria-label'), 'Balanced. Activate to inspect the equilibrium residuals.');  assert.equal(doc.getElementById('eq-badge').getAttribute('tabindex'), '0');
 });
 
-// --- 2. the popover against a fake DOM ----------------------------------------
+test('activation opens one modal topic, inerts the background, and restores state on close', () => {
 
-function makePopoverDoc() {
   const doc = makeFakeDoc();
-  doc.addEventListener = (type, fn) => { (doc.listeners[type] ??= []).push(fn); };
-  doc.listeners = {};
-  return doc;
-}
-
-const providers = {
-  getGlossary: (key) => getTerm(key),
-  getSteps: () => null,
-};
-
-test('popover: click opens the glossary entry, chips drill, back walks the breadcrumb', () => {
-  const doc = makePopoverDoc();
   const api = initTeachingPopover(doc, providers);
-  assert.equal(api.isOpen(), false, 'starts closed');
-
-  const trigger = new FakeNode('span');
+  const trigger = new FakeNode('button', doc);
   trigger.setAttribute('data-term', 'pin-support');
   doc.body.append(trigger);
-  const click = doc.listeners.click[0];
-  click({ target: trigger, preventDefault() {} });
+  trigger.focus();
+  trigger.click();
 
-  assert.equal(api.isOpen(), true, 'open after click');
-  const isWin = (n) => n.classList.contains('popover');
-  const win = doc.body.children.find(isWin);
-  assert.ok(win, 'window exists');
-  assert.equal(win.getAttribute('role'), 'dialog');
-  assert.equal(win._els.title.textContent, getTerm('pin-support').term);
+  const backdrop = findByClass(doc.body, 'teaching-backdrop');
+  const dialog = findByClass(backdrop, 'teaching-dialog');
+  assert.equal(api.isOpen(), true);
+  assert.equal(dialog.getAttribute('role'), 'dialog');
+  assert.equal(dialog.getAttribute('aria-modal'), 'true');
+  assert.equal(dialog.getAttribute('aria-labelledby'), 'teaching-title');
+  assert.equal(findByClass(dialog, 'teaching-title').textContent, getTerm('pin-support').term);
+  assert.ok(findByClass(dialog, 'teaching-copy').textContent.includes('2 reaction unknowns'));
+  assert.equal(dialog.findAll((node) => /chip|breadcrumb|topic-link/i.test(node.className)).length, 0);
+  assert.equal(doc.getElementById('lab-content').inert, true);
+  assert.equal(doc._topbar.inert, true);
+  assert.equal(trigger.inert, true);
+  assert.equal(doc.activeElement.getAttribute('aria-label'), 'Close explanation');
   assert.equal(trigger.getAttribute('aria-expanded'), 'true');
-  assert.ok(win._els.path.textContent.includes('Pin support'), 'breadcrumb shows the entry');
 
-  // Drill into a sub chip.
-  const chip = win._els.chips.children.find((c) => c.textContent === getTerm('vertical-reaction').term);
-  assert.ok(chip, 'vertical-reaction chip offered');
-  chip.click();
-  assert.equal(win._els.title.textContent, getTerm('vertical-reaction').term);
-  assert.equal(win._els.back.hidden, false, 'back button visible after drilling');
-  assert.ok(win._els.path.textContent.includes('›'), 'breadcrumb shows the trail');
-  win._els.back.click();
-  assert.equal(win._els.title.textContent, getTerm('pin-support').term, 'back returns to the parent');
+  doc.dispatch('keydown', { key: 'Escape', target: doc.activeElement });
+  assert.equal(api.isOpen(), false);
+  assert.equal(doc.activeElement, trigger);
+  assert.equal(trigger.getAttribute('aria-expanded'), 'false');
+  assert.equal(doc.getElementById('lab-content').inert, false);  assert.equal(doc._topbar.inert, false);
 });
 
-test('popover: Escape closes, click-outside closes, only one window ever exists', () => {
-  const doc = makePopoverDoc();
+test('backdrop closes the same reusable dialog and restores preexisting inert state', () => {
+
+  const doc = makeFakeDoc();
   const api = initTeachingPopover(doc, providers);
-  const trigger = new FakeNode('span');
+  const trigger = new FakeNode('button', doc);
   trigger.setAttribute('data-term', 'loads');
   doc.body.append(trigger);
-  const click = doc.listeners.click[0];
-  const key = doc.listeners.keydown[0];
-
-  click({ target: trigger, preventDefault() {} });
-  const win = doc.body.children.find((n) => n.classList.contains('popover'));
-  key({ key: 'Escape', target: trigger, preventDefault() {} });
-  assert.equal(api.isOpen(), false, 'Escape closes');
-  assert.equal(trigger.getAttribute('aria-expanded'), 'false');
-
-  click({ target: trigger, preventDefault() {} });
-  assert.equal(doc.body.findAll((n) => n.classList.contains('popover')).length, 1, 'still exactly one window');
-  // Click outside (not on a trigger, not in the window).
-  const elsewhere = new FakeNode('div');
-  click({ target: elsewhere, preventDefault() {} });
-  assert.equal(api.isOpen(), false, 'click outside closes');
-
-  // Reopening reuses the same node.
-  click({ target: trigger, preventDefault() {} });
-  assert.equal(doc.body.children.filter((n) => n.classList.contains('popover')).length, 1, 'no window accumulation');
-  void win;
+  trigger.click();
+  const backdrop = findByClass(doc.body, 'teaching-backdrop');
+  doc._topbar.inert = true;
+  backdrop.click();
+  assert.equal(api.isOpen(), false);
+  assert.equal(doc._topbar.inert, false);
+  trigger.click();  assert.equal(doc.body.findAll((node) => node.classList.contains('teaching-dialog')).length, 1);
 });
 
-test('popover: keyboard Enter opens, content is built without innerHTML', () => {
-  const doc = makePopoverDoc();
+test('Enter opens a topic, Tab is trapped, and authored content is inserted as text', () => {
+
+  const doc = makeFakeDoc();
   const api = initTeachingPopover(doc, providers);
-  const trigger = new FakeNode('span');
+  const trigger = new FakeNode('span', doc);
   trigger.setAttribute('data-term', 'bending-moment');
   doc.body.append(trigger);
-  const key = doc.listeners.keydown[0];
-  key({ key: 'Enter', target: trigger, preventDefault() {} });
-  assert.equal(api.isOpen(), true, 'Enter opens');
-  const win = doc.body.children.find((n) => n.classList.contains('popover'));
-  assert.ok(win._els.body.textContent.length > 40, 'body text present');
-  for (const n of win.findAll(() => true)) {
-    assert.equal(typeof n.innerHTML, 'undefined', 'no innerHTML anywhere in the window');
-  }
+  doc.dispatch('keydown', { key: 'Enter', target: trigger });
+  assert.equal(api.isOpen(), true);
+  const dialog = findByClass(doc.body, 'teaching-dialog');
+  const close = findByClass(dialog, 'teaching-close');
+  assert.ok(findByClass(dialog, 'teaching-copy').textContent.length > 40);
+  doc.activeElement = trigger;
+  const tab = { key: 'Tab', target: trigger, shiftKey: false, preventDefault() { this.defaultPrevented = true; } };
+  doc.dispatch('keydown', tab);
+  assert.equal(tab.defaultPrevented, true);
+  assert.equal(doc.activeElement, close);  assert.ok(dialog.findAll((node) => node.innerHTML !== undefined).length === 0);
 });
 
-test('popover: unknown terms and missing providers fail soft (window never opens)', () => {
-  const doc = makePopoverDoc();
+test('unknown topics fail softly and non-activation keys do not open the dialog', () => {
+
+  const doc = makeFakeDoc();
   const api = initTeachingPopover(doc, providers);
-  const trigger = new FakeNode('span');
+  const trigger = new FakeNode('span', doc);
   trigger.setAttribute('data-term', 'no-such-entry');
   doc.body.append(trigger);
-  doc.listeners.click[0]({ target: trigger, preventDefault() {} });
-  assert.equal(api.isOpen(), false, 'unknown term does not open a window');
+  doc.dispatch('keydown', { key: 'h', target: trigger });
+  trigger.click();  assert.equal(api.isOpen(), false);
 });
 
-// --- 3. app.js boots with the teaching layer bound only where events exist ----
+test('app teaching provider is guarded for event-less fixture documents', async () => {
 
-test('app.js source: teaching init is guarded for event-less fake DOMs', async () => {
   const { readFileSync } = await import('node:fs');
   const { fileURLToPath } = await import('node:url');
   const path = await import('node:path');
   const here = path.dirname(fileURLToPath(import.meta.url));
   const src = readFileSync(path.join(here, '../ui/app.js'), 'utf8');
-  assert.ok(src.includes('initTeaching'), 'teaching init exists');
-  assert.ok(src.includes("typeof document.addEventListener !== 'function'"),
-    'guarded — the ui-m7/m8 fake-DOM fixtures have no document.addEventListener');
+  assert.ok(src.includes("typeof document.addEventListener !== 'function'"));
 });

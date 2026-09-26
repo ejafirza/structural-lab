@@ -422,6 +422,6 @@ engineering assumptions, or glossary content changed.
   horizontal overflow. Both light and dark text-contrast checks met the 4.5:1 target.
 - `src/engine.js` and frozen `ui/render.js` were not changed; diagram tests continue to
   verify results come from the existing engine output.
-- `git diff --check` passed. Work remains uncommitted and unpushed, as requested.
+- `git diff --check` passed. At this checkpoint M10 was committed and pushed separately as `6af1f76`; the later M11 redesign is documented and released independently in `plan-m11.md`.
 
-No remaining M10 content decisions are needed.
+No remaining M10 content decisions are needed. M11's separately approved minimalist teaching/interface redesign is recorded in `plan-m11.md`; the M10 checkpoint remains unchanged.

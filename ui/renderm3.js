@@ -198,7 +198,7 @@ function drawSupport(svg, type, x, yTop) {
 function drawVyArrow(svg, x, label) {
   svg.append(el('line', { x1: x, y1: 172, x2: x, y2: 134, stroke: C.reaction, 'stroke-width': 3 }));
   svg.append(el('polygon', { points: `${x - 6},136 ${x + 6},136 ${x},126`, fill: C.reaction }));
-  svg.append(txt(x, 192, label, { fill: C.reaction, weight: 700, size: 12.5, halo: true, 'data-term': 'vertical-reaction' }));
+  svg.append(txt(x, 192, label, { fill: C.reaction, weight: 700, size: 12.5, halo: true, 'data-term': 'vertical-reaction', tabindex: 0, role: 'button', 'aria-label': 'Explain vertical support reaction' }));
 }
 
 function drawMomentArrow(svg, x, label) {
@@ -214,7 +214,7 @@ function drawMomentArrow(svg, x, label) {
   }));
   // Clamp above the viewBox — the M8 layout audit's cantilever configuration
   // exposed this pre-existing clip (label baseline 10 put the halo at y < 0).
-  svg.append(txt(x, Math.max(cy - r - 10, 16), label, { fill: C.reaction, weight: 700, size: 12.5, halo: true, 'data-term': 'moment-reaction' }));
+  svg.append(txt(x, Math.max(cy - r - 10, 16), label, { fill: C.reaction, weight: 700, size: 12.5, halo: true, 'data-term': 'moment-reaction', tabindex: 0, role: 'button', 'aria-label': 'Explain fixed-support moment reaction' }));
 }
 
 function drawReactionsM3(svg, result, xm) {
@@ -232,6 +232,9 @@ function drawReactionsM3(svg, result, xm) {
 // --- load drawings ---------------------------------------------------------
 
 function drawPointLoad(svg, result, xm, load, index, count, selected, placed) {
+  const isTeachingTrigger = (label) => ({
+    tabindex: 0, role: 'button', 'data-term': label, 'aria-label': `Explain ${label.replaceAll('-', ' ')}`,
+  });
   const xP = xm.toPx(load.position);
   const yBeam = 70;
   const flip = xP > VB_W - MR - 160;
@@ -248,24 +251,32 @@ function drawPointLoad(svg, result, xm, load, index, count, selected, placed) {
   // Uniform group structure: every load gets ONE role-less wrapper group
   // (data-load-index → the load-list row); its draggable handle (if selected)
   // is a nested group carrying data-role + tabindex.
-  const wrapper = el('g', { 'data-load-index': String(index) });
+  const wrapper = el('g', {
+    'data-load-index': String(index),
+    role: 'group',
+    'aria-label': `Point load ${index + 1} of ${count}, ${fmt(load.magnitude)} kilonewtons downward at ${fmt(load.position)} metres from support A`,
+  });
   const g = el('g', {
-    ...(selected ? { 'data-role': 'load-handle', tabindex: 0 } : {}),
-    role: 'img',
-    'aria-label': `Load ${index + 1} of ${count} — point load, ${fmt(load.magnitude)} kilonewtons at ${fmt(load.position)} metres from support A${selected ? ' — drag, or focus and use arrow keys, to move' : ''}`,
+    ...(selected ? { 'data-role': 'load-handle', tabindex: 0, role: 'slider' } : {}),
+    ...(selected ? {
+      'aria-label': `Point load ${index + 1} position`,
+      'aria-valuemin': 0,
+      'aria-valuemax': result.input.span,
+      'aria-valuenow': load.position,
+      'aria-valuetext': `${fmt(load.position)} metres from support A`,
+      'aria-keyshortcuts': 'ArrowLeft ArrowRight',
+    } : { role: 'img' }),
+    'aria-description': `Point load ${index + 1} of ${count}, ${fmt(load.magnitude)} kilonewtons downward${selected ? '; drag or use left and right arrow keys to move' : ''}`,
   });
   wrapper.append(g);
   g.append(el('rect', { x: xP - 90, y: 0, width: 180, height: yBeam - 4, fill: 'transparent', 'pointer-events': 'all' }));
+  g.setAttribute('aria-description', `Load ${index + 1} of ${count} — ${fmt(load.magnitude)} kilonewtons downward${selected ? '; drag or use left and right arrow keys to move' : ''}`);
   g.append(el('line', { x1: xP, y1: 10, x2: xP, y2: 54, stroke: C.load, 'stroke-width': 3 }));
   g.append(el('polygon', { points: `${xP - 7},52 ${xP + 7},52 ${xP},64`, fill: C.load }));
-  g.append(txt(spot.x, spot.y, label, { anchor: spot.anchor, fill: C.load, weight: 700, size: 13, halo: true }));
-  if (selected) {
-    const hint = '↔ drag';
-    const hintSpot = findFreeSpot(placed, [
-      { x: spot.x, y: spot.y + 17, anchor: spot.anchor, w: estimateW(hint, 11) },
-    ]);
-    g.append(txt(hintSpot.x, hintSpot.y, hint, { anchor: hintSpot.anchor, fill: C.guide, size: 11 }));
-  }
+  wrapper.append(txt(spot.x, spot.y, label, {
+    anchor: spot.anchor, fill: C.load, weight: 700, size: 13, halo: true,
+    ...isTeachingTrigger('point-load'),
+  }));
   svg.append(wrapper);
 }
 
@@ -388,8 +399,13 @@ function drawDistributedLoad(svg, result, xm, load, index, count, selected, plac
       const hg = el('g', {
         'data-role': role,
         tabindex: 0,
-        role: 'img',
-        'aria-label': `Load ${index + 1} of ${count} — ${role === 'region-start' ? 'region start' : 'region end'} of distributed load — drag to move`,
+        role: 'slider',
+        'aria-label': `Load ${index + 1} of ${count} — ${role === 'region-start' ? 'region start' : 'region end'} position`,
+        'aria-valuemin': 0,
+        'aria-valuemax': result.input.span,
+        'aria-valuenow': x,
+        'aria-valuetext': `${fmt(x)} metres from support A`,
+        'aria-keyshortcuts': 'ArrowLeft ArrowRight',
       });
       hg.append(el('rect', { x: p - 16, y: 6, width: 32, height: 64, fill: 'transparent', 'pointer-events': 'all' }));
       hg.append(el('line', { x1: p, y1: 12, x2: p, y2: 64, stroke: C.udl, 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }));
@@ -410,8 +426,13 @@ function drawDistributedLoad(svg, result, xm, load, index, count, selected, plac
         'data-role': 'profile-point',
         'data-point-index': String(pi),
         tabindex: 0,
-        role: 'img',
-        'aria-label': `Load ${index + 1} of ${count}, point ${pi + 1} of ${pts.length} — ${fmt(p.w)} kilonewtons per metre at ${fmt(p.x)} metres — drag, or focus and use arrow keys`,
+        role: 'slider',
+        'aria-label': `Load ${index + 1} of ${count}, shape point ${pi + 1} of ${pts.length} — position; use left and right arrows to adjust, up and down to change intensity`,
+        'aria-valuemin': 0,
+        'aria-valuemax': result.input.span,
+        'aria-valuenow': p.x,
+        'aria-valuetext': `${fmt(p.x)} metres from support A; ${fmt(p.w)} kilonewtons per metre downward`,
+        'aria-keyshortcuts': 'ArrowLeft ArrowRight ArrowUp ArrowDown',
       });
       hg.append(el('circle', { cx: hx, cy: hy, r: 14, fill: 'transparent', 'pointer-events': 'all' }));
       hg.append(el('circle', { cx: hx, cy: hy, r: 5.5, fill: C.handleFill, stroke: C.udl, 'stroke-width': 2.5 }));
@@ -439,7 +460,7 @@ function drawCombinedResultant(svg, result, xm, placed) {
   svg.append(el('line', { x1: xR, y1: 16, x2: xR, y2: 56, stroke: C.udl, 'stroke-width': 2.5, 'stroke-dasharray': '5 3' }));
   svg.append(el('polygon', { points: `${xR - 6},54 ${xR + 6},54 ${xR},66`, fill: C.udl, opacity: 0.9 }));
   svg.append(txt(rSpot.x, rSpot.y, rLabel, { anchor: rSpot.anchor, fill: C.udl, weight: 700, size: 12.5, halo: true }));
-  svg.append(txt(xR, 252, `x̄ = ${fmt(result.resultant.position)} m`, { fill: C.muted, size: 11, halo: true, 'data-term': 'centroid' }));
+  svg.append(txt(xR, 252, `x̄ = ${fmt(result.resultant.position)} m`, { fill: C.muted, size: 11, halo: true, 'data-term': 'centroid', tabindex: 0, role: 'button', 'aria-label': 'Explain load centroid' }));
 }
 
 /**
@@ -528,6 +549,7 @@ function xAxisLabels(svg, xm, result, labelY) {
 
 function renderBeamM3(svg, state, result, xm) {
   svg.setAttribute('viewBox', `0 0 ${VB_W} ${H_BEAM}`);
+  svg.setAttribute('role', 'group');
   svg.replaceChildren();
 
   const xA = xm.toPx(0);
@@ -549,8 +571,8 @@ function renderBeamM3(svg, state, result, xm) {
   svg.append(el('line', { x1: xA, y1: yBeam, x2: xB, y2: yBeam, stroke: C.beam, 'stroke-width': 6, 'stroke-linecap': 'round' }));
 
   // Supports
-  svg.append(txt(xA, yBeam - 14, `A (${supports.left})`, { size: 11.5, fill: C.muted, halo: true }));
-  svg.append(txt(xB, yBeam - 14, `B (${supports.right})`, { size: 11.5, fill: C.muted, halo: true }));
+  svg.append(txt(xA, yBeam - 14, `A (${supports.left})`, { size: 11.5, fill: C.muted, halo: true, tabindex: 0, role: 'button', 'data-term': 'supports', 'aria-label': `Explain support A, ${supports.left}` }));
+  svg.append(txt(xB, yBeam - 14, `B (${supports.right})`, { size: 11.5, fill: C.muted, halo: true, tabindex: 0, role: 'button', 'data-term': 'supports', 'aria-label': `Explain support B, ${supports.right}` }));
   drawSupport(svg, supports.left, xA, yBeam + 3);
   drawSupport(svg, supports.right, xB, yBeam + 3);
 
@@ -571,6 +593,7 @@ function renderBeamM3(svg, state, result, xm) {
 
 function renderSFDM3(svg, state, result, xm, determinate) {
   svg.setAttribute('viewBox', `0 0 ${VB_W} ${H_SFD}`);
+  svg.setAttribute('role', 'group');
   svg.replaceChildren();
   if (!determinate) { placeholder(svg, result); return; }
 
@@ -616,6 +639,7 @@ function renderSFDM3(svg, state, result, xm, determinate) {
 
 function renderBDMM3(svg, state, result, xm, determinate) {
   svg.setAttribute('viewBox', `0 0 ${VB_W} ${H_BMD}`);
+  svg.setAttribute('role', 'group');
   svg.replaceChildren();
   if (!determinate) { placeholder(svg, result); return; }
 
@@ -647,13 +671,14 @@ function renderBDMM3(svg, state, result, xm, determinate) {
   let lx = peakX;
   if (peakX < ML + 130) { anchor = 'start'; lx = peakX + 12; }
   else if (peakX > VB_W - MR - 130) { anchor = 'end'; lx = peakX - 12; }
-  svg.append(txt(lx, labelY, label, { fill: C.moment, weight: 700, halo: true, anchor, 'data-term': 'maximum-moment' }));
+  svg.append(txt(lx, labelY, label, { fill: C.moment, weight: 700, halo: true, anchor, 'data-term': 'maximum-moment', tabindex: 0, role: 'button', 'aria-label': 'Explain maximum bending moment' }));
 
   xAxisLabels(svg, xm, result, 264);
 }
 
 function renderDeflectionM3(svg, state, result, xm, determinate) {
   svg.setAttribute('viewBox', `0 0 ${VB_W} ${H_DEFL}`);
+  svg.setAttribute('role', 'group');
   svg.replaceChildren();
   if (!determinate) { placeholder(svg, result); return; }
 
@@ -679,7 +704,7 @@ function renderDeflectionM3(svg, state, result, xm, determinate) {
   // Exaggeration note + true max sag (real text, screen-reader reachable).
   const mm = max.value * 1000;
   svg.append(txt(ML, 22, `shape exaggerated ×${fmt(factor)} — true max deflection ${fmt(mm)} mm (${max.sign}) at x = ${fmt(max.position)} m · E·I = ${fmt(EI)} kN·m²`, {
-    anchor: 'start', fill: C.muted, italic: true, size: 11, halo: true, 'data-term': 'exaggeration',
+    anchor: 'start', fill: C.muted, italic: true, size: 11, halo: true, 'data-term': 'exaggeration', tabindex: 0, role: 'button', 'aria-label': 'Explain deflection drawing scale',
   }));
 
   // The curve (down-positive v plots below the undeformed line).
@@ -693,7 +718,7 @@ function renderDeflectionM3(svg, state, result, xm, determinate) {
   svg.append(el('circle', { cx: maxX, cy: maxY, r: 4.5, fill: C.defl, stroke: C.halo, 'stroke-width': 1.5 }));
   svg.append(el('line', { x1: maxX, y1: y0, x2: maxX, y2: maxY, stroke: C.defl, 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
   svg.append(txt(maxX + (maxX < VB_W - MR - 120 ? 10 : -10), maxY + (max.sign === 'down' ? -8 : 16),
-    `vmax = ${fmt(mm)} mm`, { anchor: maxX < VB_W - MR - 120 ? 'start' : 'end', fill: C.defl, weight: 700, size: 12, halo: true, 'data-term': 'max-deflection' }));
+    `vmax = ${fmt(mm)} mm`, { anchor: maxX < VB_W - MR - 120 ? 'start' : 'end', fill: C.defl, weight: 700, size: 12, halo: true, 'data-term': 'max-deflection', tabindex: 0, role: 'button', 'aria-label': 'Explain maximum deflection' }));
 
   // x-axis ticks: 0 and L only (the curve is qualitative; numbers above).
   const tick = (x) => svg.append(el('line', { x1: x, y1: y0 + 16, x2: x, y2: y0 + 24, stroke: C.axis, 'stroke-width': 1.2 }));
@@ -745,7 +770,11 @@ function reactionCards(result) {
     const r = result.reactions[side];
     for (const [comp, val] of Object.entries(r)) {
       if (comp === 'type') continue;
-      out.push({ label: `Reaction ${NAME[comp]}${letter}`, value: `${fmt(val)} ${UNIT[comp]}` });
+      out.push({
+        label: `Reaction ${NAME[comp]}${letter}`,
+        value: `${fmt(val)} ${UNIT[comp]}`,
+        steps: `Reaction ${NAME[comp]}${letter}`,
+      });
     }
   }
   return out;
@@ -793,9 +822,6 @@ function renderResultCards(doc, state, result) {
       sub: `${result.deflection.max.sign} · at x = ${fmt(result.deflection.max.position)} m · E·I = ${fmt(result.deflection.EI)} kN·m²`,
       steps: 'Max deflection',
     });
-    // One door per solved GROUP (the first reaction card opens the reactions
-    // derivation; the rest open the same group) — every card is still a door.
-    for (const c of cards) if (!c.steps && !c.term) c.steps = 'Reactions';
   } else {
     cards.push({ label: 'Reactions', value: '–', sub: 'not solved by statics', term: 'statically-indeterminate' });
     cards.push({ label: 'Max bending moment', value: '–', sub: 'not solved by statics', term: 'statically-indeterminate' });
@@ -810,13 +836,18 @@ function renderResultCards(doc, state, result) {
 function renderEqBadge(doc, result) {
   const eq = doc.getElementById('eq-badge');
   if (result.classification.status !== 'determinate') {
-    eq.textContent = 'Not solved — see determinacy note';
+    eq.textContent = 'Not solved';
+    eq.setAttribute('aria-label', 'Not solved. This support arrangement has no equilibrium residuals to inspect.');
+    eq.setAttribute('tabindex', '-1');
     eq.className = 'eq-badge neutral';
     return;
   }
   const e = result.equilibrium;
-  eq.textContent =
-    `Engine equilibrium self-check: ΣFx = ${e.sumFx.toExponential(1)} · ΣFy = ${e.sumFy.toExponential(1)} · ΣM = ${e.sumMz.toExponential(1)} ✓`;
+  eq.textContent = e.satisfied ? 'Balanced ✓' : 'Check balance';
+  eq.setAttribute('aria-label', e.satisfied
+    ? 'Balanced. Activate to inspect the equilibrium residuals.'
+    : 'Equilibrium check failed. Activate to inspect the residuals.');
+  eq.setAttribute('tabindex', '0');
   eq.className = `eq-badge ${e.satisfied ? 'ok' : 'bad'}`;
 }
 
