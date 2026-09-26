@@ -1,5 +1,5 @@
 /**
- * analysis.js — General beam analysis (Milestones 3, 4, 5 & 6)
+ * analysis.js — General beam analysis (Milestones 3–7)
  * -------------------------------------------------------------
  * The single deterministic entry point for a beam with ONE OR MORE loads
  * (1..MAX_LOADS, any mix) on two end supports:
@@ -14,6 +14,11 @@
  *   • linear  → linearly-varying load over a sub-region [start, end] (M5):
  *               partial UDL (wStart = wEnd), triangular (one end = 0),
  *               trapezoidal (both ends > 0).
+ *   • profile → piecewise-linear w(x) through 2..MAX_PROFILE_POINTS control
+ *               points (M7); a repeated adjacent x is a vertical step. The
+ *               resultant is the per-segment sum of the M5 closed forms and
+ *               the kernels reuse the two-function contract of M6 — no new
+ *               numerics, every integral exact.
  *
  * Classification (unchanged from M3/M4):
  *   • determinate    → solved: reactions, SFD/BMD, max moment (+ sign),
@@ -142,6 +147,24 @@ function computeResultant(load, span) {
   }
   if (load.type === 'udl') {
     return { value: load.intensity * span, position: span / 2 };
+  }
+  if (load.type === 'profile') {
+    // Per-segment summation of the M5 trapezoid closed forms (plan-m7 §3):
+    // a zero-width segment (a step pair) contributes nothing — correct, a
+    // jump changes the shape, not the total.
+    let R = 0;
+    let moment = 0;
+    const pts = load.points;
+    for (let i = 1; i < pts.length; i++) {
+      const b = pts[i].x - pts[i - 1].x;
+      if (b <= 0) continue;
+      const Ri = ((pts[i - 1].w + pts[i].w) * b) / 2;
+      if (Ri <= 0) continue;
+      const xbari = pts[i - 1].x + (b * (pts[i - 1].w + 2 * pts[i].w)) / (3 * (pts[i - 1].w + pts[i].w));
+      R += Ri;
+      moment += Ri * xbari;
+    }
+    return { value: R, position: moment / R };
   }
   // linear: trapezoid area + centroid
   const b = load.end - load.start;
@@ -418,6 +441,8 @@ function solveCantileverLinear(L, x1, x2, w1, w2, fixedAtLeft, samples) {
  *   point    → step: 0 for x ≤ a, P for x > a
  *   udl      → M5 linear kernel over [0, L] with w1 = w2 = intensity
  *   linear   → M5 kernel over [start, end] (piecewise quadratic inside)
+ *   profile  → sum of M5 kernels over consecutive control-point segments
+ *              (profileKernels, M7); a step pair contributes nothing.
  */
 function cumulativeKernel(load, span) {
   if (load.type === 'point') {
@@ -426,6 +451,9 @@ function cumulativeKernel(load, span) {
   if (load.type === 'udl') {
     return linearKernels(0, span, load.intensity, load.intensity, load.intensity * span, span / 2).cumulative;
   }
+  if (load.type === 'profile') {
+    return profileKernels(load.points).cumulative;
+  }
   const b = load.end - load.start;
   const R = ((load.wStart + load.wEnd) * b) / 2;
   const xbar = load.start + (b * (load.wStart + 2 * load.wEnd)) / (3 * (load.wStart + load.wEnd));
@@ -433,9 +461,35 @@ function cumulativeKernel(load, span) {
 }
 
 /**
+ * Closed-form kernels for a `profile` load (M7): the M5 two-function contract
+ * ({cumulative, firstMoment}) summed segment by segment. Each segment's
+ * integrals are the elementary trapezoid area / first moment — exact, no
+ * quadrature approximation.
+ */
+function profileKernels(points) {
+  const segments = [];
+  for (let i = 1; i < points.length; i++) {
+    const x1 = points[i - 1].x;
+    const x2 = points[i].x;
+    const w1 = points[i - 1].w;
+    const w2 = points[i].w;
+    const b = x2 - x1;
+    if (b <= 0) continue; // a step pair: shape only, no area
+    const R = ((w1 + w2) * b) / 2;
+    if (R <= 0) continue; // zero-intensity stretch (a gap): contributes nothing
+    const xbar = x1 + (b * (w1 + 2 * w2)) / (3 * (w1 + w2));
+    segments.push(linearKernels(x1, x2, w1, w2, R, xbar));
+  }
+  const cumulative = (x) => segments.reduce((s, k) => s + k.cumulative(x), 0);
+  const firstMoment = (x) => segments.reduce((s, k) => s + k.firstMoment(x), 0);
+  return { cumulative, firstMoment };
+}
+
+/**
  * Per-load first-moment kernel F(x) = ∫₀ˣ (x−t)·w(t) dt about x.
  *   point    → P·max(0, x − a)
  *   udl/linear → M5 linear kernel (piecewise cubic inside)
+ *   profile  → profileKernels (M7), same contract as linear
  */
 function firstMomentKernel(load, span) {
   if (load.type === 'point') {
@@ -443,6 +497,9 @@ function firstMomentKernel(load, span) {
   }
   if (load.type === 'udl') {
     return linearKernels(0, span, load.intensity, load.intensity, load.intensity * span, span / 2).firstMoment;
+  }
+  if (load.type === 'profile') {
+    return profileKernels(load.points).firstMoment;
   }
   const b = load.end - load.start;
   const R = ((load.wStart + load.wEnd) * b) / 2;
@@ -521,13 +578,17 @@ function solveCombined(loads, span, left, right, samples) {
   const firstMoment = (x) => firstMomentFns.reduce((s, f) => s + f(x), 0);
 
   // Sampling ordinates: uniform grid + every load event (point positions,
-  // region boundaries). includePoints() inserts and sorts, and de-duplicates
-  // within tolerance — so a point load sitting exactly on a region boundary
-  // yields one ordinate, not two.
+  // region boundaries, and — M7 — every profile control point x). includePoints()
+  // inserts and sorts, and de-duplicates within tolerance — so a point load
+  // sitting exactly on a region boundary yields one ordinate, not two. For a
+  // profile STEP (a repeated x) one ordinate is also the correct boundary:
+  // an intensity jump leaves V C⁰ and M C¹ there (unlike a point load, which
+  // jumps V and needs the jump-pair sampling of buildCombinedShear).
   const extras = [];
   for (const load of loads) {
     if (load.type === 'point') extras.push(load.position);
     else if (load.type === 'udl') extras.push(0, span);
+    else if (load.type === 'profile') extras.push(...load.points.map((p) => p.x));
     else extras.push(load.start, load.end);
   }
   const xs = includePoints(makeGrid(span, samples), extras, span);
@@ -636,8 +697,9 @@ function solveCombined(loads, span, left, right, samples) {
 
 /**
  * Analyze a single-span beam with 1..MAX_LOADS loads (point, full-span UDL,
- * or linear). Single-load inputs keep the frozen M1/M4/M5 solver paths;
- * 2+ loads solve by closed-form superposition (solveCombined).
+ * linear, or profile). Single point/udl/linear inputs keep the frozen
+ * M1/M4/M5 solver paths; a profile load (alone or mixed) and 2+ loads solve
+ * by closed-form superposition (solveCombined).
  *
  * @param {object} input
  * @param {number} input.span         L — span in metres (> 0).
@@ -659,6 +721,7 @@ export function analyzeBeam(input) {
       type === 'udl' ? 'beam-udl'
       : type === 'linear' ? 'beam-linear'
       : type === 'point' ? 'beam-point-load'
+      : type === 'profile' ? 'beam-profile'
       : 'beam-multi-load',
     input: {
       span,
@@ -683,7 +746,9 @@ export function analyzeBeam(input) {
     return base;
   }
 
-  if (type === 'combined') {
+  if (type === 'combined' || type === 'profile') {
+    // M6 multi-load and the M7 profile (alone or in a mix) share the fully
+    // general superposition solver; a lone profile is just its one-kernel case.
     return { ...base, ...solveCombined(loads, span, left, right, samples) };
   }
 

@@ -12,12 +12,14 @@ constants were changed; check logic is untouched.
 ```bash
 node verify/consolidation-cdp-verify.mjs     # 32 functional checks (M5 regression anchors)
 node verify/consolidation-layout-check.mjs   # 6 layout checks — point + 5 presets
-node verify/multi-load-cdp-verify.mjs        # 21 functional checks — M6 load list + M6.5 drag regression
+node verify/multi-load-cdp-verify.mjs        # 22 functional checks — M6 load list + M6.5 drag regression
 node verify/multi-layout-check.mjs           # 6 layout checks — multi-load configurations
+node verify/profile-cdp-verify.mjs           # 30 functional checks — M7 profiles (presets, table, handles, emit rule)
+node verify/profile-layout-check.mjs         # 8 layout checks — profile configurations incl. 6-point worst case
 ```
 
 Each script starts `server.js` itself (no need to run `npm start` first), launches
-headless Edge with a remote-debugging port (9336–9342, one per script) and a throwaway
+headless Edge with a remote-debugging port (9336–9344, one per script) and a throwaway
 user-data dir under `verify/tmp/`, drives the UI, asserts DOM state, and fails on any
 console error. Since M6, the harnesses also strip a `PORT` inherited from the outer
 environment (so an outer tool exporting e.g. `PORT=0` cannot rebind the spawned app
@@ -61,3 +63,25 @@ the asserted values and counts are unchanged.
 - Determinacy honesty with several loads: classification only, combined R still shown.
 - Multi-load layout: no clipping / collisions across crowded point loads,
   point + UDL, a point inside a region, three loads, and the 6-load cap case.
+
+## What they assert (profile pair — M7)
+
+- Preset chips **Stepped** and **Snow drift ▲** fill the shape-point table and
+  put the profile on the frozen paths' regression rails: hand-derived Case A
+  numbers verbatim (RA = 15 kN, RB = 21 kN, Mmax = 27.6 kNm at x = 3.38 m,
+  combined R = 36 kN, x̄ = 3.5 m).
+- Shape-point table: rows `x | w`, **+ Add point** (disabled at the 6-point cap
+  with a tooltip naming the cap), per-row remove (disabled at two points),
+  flat M5 editor hidden for 3+-point loads and restored for two-point loads.
+- **Emit rule in the browser**: two points → the frozen linear numbers
+  (RA = 9, RB = 3, Mmax = 10.1 kNm for the stripped shape); three points →
+  profile values.
+- Handles: one per control point on the SELECTED profile; keyboard nudge
+  (ArrowUp raises a point's intensity by 0.1 kN/m) and a **real synthesized
+  pointer drag** moving a control point along the beam with live recompute —
+  the M6.5 drag-repair guard extended to the new handles.
+- Honesty with a profile: indeterminate → classification only, combined
+  R/x̄ still on the beam.
+- Layout: no clipping / collisions across stepped, snow-drift, gap (6 points),
+  6-point staircase, profile + point load, selected vs unselected handles,
+  two profiles, and the single-load regression.

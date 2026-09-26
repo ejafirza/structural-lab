@@ -8,10 +8,11 @@
  *
  * Load shapes drawn from the descriptors (geometry only):
  *   point → red arrow · udl (full-span) → shaded band · linear → rectangle /
- *   triangle / trapezoid over the sub-region [start, end]. A beam may carry
- *   several loads (M6): each is drawn from its own descriptor with a circled
- *   number tying it to its row in the load list; drag handles exist only on
- *   the SELECTED load; the combined resultant R, x̄ is drawn once.
+ *   triangle / trapezoid over the sub-region [start, end] · profile (M7) →
+ *   polygon through the control points, with a vertical edge at a step. A
+ *   beam may carry several loads (M6): each is drawn from its own descriptor
+ *   with a circled number tying it to its row in the load list; drag handles
+ *   exist only on the SELECTED load; the combined resultant R, x̄ is drawn once.
  *
  * Visualization convention (owner-approved): BMD drawn on the tension side —
  * sagging (+) BELOW the axis, hogging (−) ABOVE the axis. Engine sign
@@ -260,13 +261,37 @@ function distributedGeometry(load, span) {
   return { x1: load.start, x2: load.end, w1: load.wStart, w2: load.wEnd };
 }
 
+/**
+ * Band scaling (presentation, shared with the drag layer in app.js): a
+ * distributed band is drawn from y = BAND_Y_BASE up to at most BAND_MAX_H
+ * pixels at the load's peak intensity. app.js inverts exactly this mapping
+ * when a vertical drag converts pointer motion into an intensity change —
+ * these constants are the single home of the conversion in both directions.
+ */
+export const BAND_Y_BASE = 60;
+export const BAND_MAX_H = 34;
+
+/** Distinct consecutive intensity levels of a profile, formatted ('4,4,8,8' → '4→8'). */
+function profileLevels(points) {
+  const levels = [];
+  for (const p of points) {
+    const v = fmt(p.w);
+    if (levels[levels.length - 1] !== v) levels.push(v);
+  }
+  return levels;
+}
+
 function drawDistributedLoad(svg, result, xm, load, index, count, selected, placed) {
-  const { x1, x2, w1, w2 } = distributedGeometry(load, result.input.span);
+  const isProfile = load.type === 'profile';
+  const pts = isProfile ? load.points : null;
+  const { x1, x2, w1, w2 } = isProfile
+    ? { x1: pts[0].x, x2: pts[pts.length - 1].x, w1: pts[0].w, w2: pts[pts.length - 1].w }
+    : distributedGeometry(load, result.input.span);
   const px1 = xm.toPx(x1);
   const px2 = xm.toPx(x2);
-  const maxW = Math.max(w1, w2, 1e-9);
-  const yBase = 60;
-  const maxH = 34;
+  const maxW = isProfile ? Math.max(...pts.map((p) => p.w), 1e-9) : Math.max(w1, w2, 1e-9);
+  const yBase = BAND_Y_BASE;
+  const maxH = BAND_MAX_H;
   const yTopOf = (w) => yBase - (w / maxW) * maxH;
   const num = CIRCLED[index] ?? `${index + 1}.`;
 
@@ -275,12 +300,21 @@ function drawDistributedLoad(svg, result, xm, load, index, count, selected, plac
   const g = el('g', { 'data-load-index': String(index) });
   svg.append(g);
 
-  // Filled shape from the descriptor. Uniform loads render as a `rect`
-  // (rectangle); linearly-varying loads render as a `polygon` (triangle or
-  // trapezoid).
+  // Filled shape from the descriptor. A profile (M7) renders as one polygon
+  // through every control point — a repeated x draws the vertical step edge.
+  // Uniform loads render as a `rect` (rectangle); linearly-varying loads as a
+  // `polygon` (triangle or trapezoid).
   const yTop1 = yTopOf(w1);
   const yTop2 = yTopOf(w2);
-  if (Math.abs(w1 - w2) < 1e-12) {
+  if (isProfile) {
+    const outline = [`${px1},${yBase}`];
+    for (const p of pts) outline.push(`${xm.toPx(p.x)},${yTopOf(p.w)}`);
+    outline.push(`${px2},${yBase}`);
+    g.append(el('polygon', {
+      points: outline.join(' '),
+      fill: C.udlFill, stroke: C.udl, 'stroke-width': 1.5, 'stroke-linejoin': 'round',
+    }));
+  } else if (Math.abs(w1 - w2) < 1e-12) {
     g.append(el('rect', {
       x: px1, y: yTop1, width: px2 - px1, height: yBase - yTop1,
       fill: C.udlFill, stroke: C.udl, 'stroke-width': 1.5,
@@ -300,11 +334,22 @@ function drawDistributedLoad(svg, result, xm, load, index, count, selected, plac
     g.append(el('polygon', { points: `${x - 4},64 ${x + 4},64 ${x},71`, fill: C.udl }));
   }
 
-  // Intensity label (peak value for triangular, range for trapezoidal),
-  // prefixed with the load's circled number. Falls back to higher lanes when
-  // another load's label already occupies the spot above the band.
-  const uniform = Math.abs(w1 - w2) < 1e-12;
-  const label = uniform ? `${num} w = ${fmt(w1)} kN/m ↓` : `${num} w: ${fmt(w1)} → ${fmt(w2)} kN/m ↓`;
+  // Intensity label (peak value for triangular, range for trapezoidal,
+  // distinct levels for a profile — capped at three, then min→max), prefixed
+  // with the load's circled number. Falls back to higher lanes when another
+  // load's label already occupies the spot above the band.
+  const uniform = !isProfile && Math.abs(w1 - w2) < 1e-12;
+  const label = isProfile
+    ? (() => {
+        const levels = profileLevels(pts);
+        const wl = levels.length === 1
+          ? `w = ${levels[0]}`
+          : levels.length <= 3
+            ? `w: ${levels.join('→')}`
+            : `w: ${fmt(Math.min(...pts.map((p) => p.w)))}→${fmt(Math.max(...pts.map((p) => p.w)))}`;
+        return `${num} ${wl} kN/m ↓`;
+      })()
+    : uniform ? `${num} w = ${fmt(w1)} kN/m ↓` : `${num} w: ${fmt(w1)} → ${fmt(w2)} kN/m ↓`;
   const lx = (px1 + px2) / 2;
   const topY = Math.min(yTop1, yTop2) - 8;
   const labelSpot = findFreeSpot(placed, [
@@ -337,6 +382,27 @@ function drawDistributedLoad(svg, result, xm, load, index, count, selected, plac
       hg.append(el('circle', { cx: p, cy: 24, r: 5, fill: '#ffffff', stroke: C.udl, 'stroke-width': 2.5 }));
       g.append(hg);
     }
+  }
+
+  // Shape-point handles (selected profiles only — the Tab path stays short).
+  // One handle per control point: horizontal drag changes x, vertical drag
+  // changes w (app.js owns the mutation; this is geometry only). The
+  // data-point-index attribute ties each handle to its table row.
+  if (selected && isProfile) {
+    pts.forEach((p, pi) => {
+      const hx = xm.toPx(p.x);
+      const hy = yTopOf(p.w);
+      const hg = el('g', {
+        'data-role': 'profile-point',
+        'data-point-index': String(pi),
+        tabindex: 0,
+        role: 'img',
+        'aria-label': `Load ${index + 1} of ${count}, point ${pi + 1} of ${pts.length} — ${fmt(p.w)} kilonewtons per metre at ${fmt(p.x)} metres — drag, or focus and use arrow keys`,
+      });
+      hg.append(el('circle', { cx: hx, cy: hy, r: 14, fill: 'transparent', 'pointer-events': 'all' }));
+      hg.append(el('circle', { cx: hx, cy: hy, r: 5.5, fill: '#ffffff', stroke: C.udl, 'stroke-width': 2.5 }));
+      g.append(hg);
+    });
   }
 }
 
@@ -421,6 +487,16 @@ function xAxisLabels(svg, xm, result, labelY) {
     const d = loads[0];
     if (d.start > 0) markers.push({ x: d.start, text: `x₁ = ${fmt(d.start)} m` });
     if (d.end < L) markers.push({ x: d.end, text: `x₂ = ${fmt(d.end)} m` });
+  } else if (type === 'profile') {
+    // Only the STEP positions get axis markers (a repeated x = an intensity
+    // jump); plain kinks stay table-only, keeping the axis uncluttered (the
+    // M6 lesson). The numbers live in the shape-point table.
+    const pts = loads[0].points;
+    for (let i = 1; i < pts.length; i++) {
+      if (pts[i].x === pts[i - 1].x && pts[i].w !== pts[i - 1].w) {
+        markers.push({ x: pts[i].x, text: `step @ ${fmt(pts[i].x)} m` });
+      }
+    }
   } else if (result.classification.status === 'determinate' && result.maxMoment) {
     // Multi-load: per-load positions live on the beam panel; the axis keeps
     // 0, L and the peak position only.

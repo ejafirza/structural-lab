@@ -7,11 +7,12 @@ import { normalizeLoads, LOAD_TYPES, LOAD_TYPE_KEYS } from '../src/loadmodel.js'
 
 const SPAN = 6;
 
-test('catalog has point + udl + linear with correct units', () => {
-  assert.deepEqual(LOAD_TYPE_KEYS, ['point', 'udl', 'linear']);
+test('catalog has point + udl + linear + profile with correct units (M7 supersedes the three-entry assertion)', () => {
+  assert.deepEqual(LOAD_TYPE_KEYS, ['point', 'udl', 'linear', 'profile']);
   assert.equal(LOAD_TYPES.point.unit, 'kN');
   assert.equal(LOAD_TYPES.udl.unit, 'kN/m');
   assert.equal(LOAD_TYPES.linear.unit, 'kN/m');
+  assert.equal(LOAD_TYPES.profile.unit, 'kN/m');
 });
 
 test('legacy shorthand normalizes to a single point load', () => {

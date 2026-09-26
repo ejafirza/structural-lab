@@ -307,6 +307,89 @@ body {
   border: 0;
 }
 
+/* ---------- shape-point table (M7) ---------- */
+
+.point-table {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.point-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.point-tag {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 50%;
+  border: 1.5px solid var(--udl, #059669);
+  color: var(--udl, #059669);
+}
+
+.point-row input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.point-row input[type="number"]:focus-visible {
+  outline: 2px solid var(--shear);
+  outline-offset: 1px;
+}
+
+.point-remove {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--muted);
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.point-remove:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); }
+.point-remove:disabled { opacity: 0.4; cursor: not-allowed; }
+.point-remove:focus-visible { outline: 2px solid var(--shear); outline-offset: 1px; }
+
+.point-add {
+  margin-top: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.point-add:hover:not(:disabled) { border-color: #059669; color: #059669; }
+.point-add:disabled { opacity: 0.45; cursor: not-allowed; }
+.point-add:focus-visible { outline: 2px solid var(--shear); outline-offset: 1px; }
+
+/* Handle highlighted from the table (beam ↔ table link). */
+.row-highlight circle { stroke-width: 4; }
+
 /* ---------- presets ---------- */
 
 .ctl-label { font-size: 12.5px; font-weight: 600; color: var(--ink); }

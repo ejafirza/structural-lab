@@ -15,6 +15,8 @@
  *      the attribute identifies a DOM handle, the drag id selects the
  *      mutation; the mapping must exist and live in exactly one place).
  * Any new handle type must update all three consistently or this test fails.
+ * (M7 added the fourth role, 'profile-point' — one handle per control point
+ * of a profile load, draggable both along the beam and vertically.)
  *
  * Pure source inspection — no DOM, no imports of the module under test.
  */
@@ -56,7 +58,7 @@ const renames = new Map(
 test('pointerdown accepts exactly the documented handle roles', () => {
   assert.deepEqual(
     [...acceptedRoles].sort(),
-    ['load-handle', 'region-end', 'region-start'],
+    ['load-handle', 'profile-point', 'region-end', 'region-start'],
     'the accepted data-role set changed — update this guard together with renderm3.js and the drag handlers'
   );
 });

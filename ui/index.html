@@ -72,6 +72,12 @@
           <div class="preset-chips" id="preset-chips" role="group" aria-labelledby="presets-label"></div>
           <p class="hint">Starting configurations — one editor; adjust freely after.</p>
         </div>
+        <div class="ctl" id="ctl-points" hidden>
+          <span class="ctl-label" id="points-label">Shape points <span id="point-count" class="list-count"></span></span>
+          <div class="point-table" id="point-table" role="group" aria-labelledby="points-label"></div>
+          <button type="button" id="btn-add-cp" class="point-add">+ Add point</button>
+          <p class="hint">Intensity follows straight lines through the points. Same x on two rows = a step.</p>
+        </div>
         <div class="ctl" id="ctl-region-start" hidden>
           <label for="num-region-start">Region start x₁ (from A)</label>
           <div class="ctl-row">
