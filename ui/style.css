@@ -503,3 +503,174 @@ body {
   .card-value { font-size: 17px; }
   .eq-badge { font-size: 11px; }
 }
+
+/* ============================ M9 teaching layer ============================
+   Dotted-underline click-to-learn affordance, info chips beside generated
+   labels, and the one teaching popover. All colours reuse the theme
+   variables — no new palette (M10 owns the light/dark split). */
+
+/* --- triggers: existing elements gain a dotted underline, text unchanged --- */
+
+[data-term] {
+  cursor: pointer;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--muted);
+  text-underline-offset: 3px;
+}
+[data-term]:hover { text-decoration-color: var(--accent); }
+[data-term]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+div[data-term].panel-heading,
+span[data-term].ctl-label-text {
+  display: inline-block;
+}
+
+/* --- ℹ info chip beside labels that cannot carry the underline themselves --- */
+
+.term-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  margin-left: 5px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: 1px;
+}
+.term-chip:hover { border-color: var(--accent); color: var(--accent); }
+.term-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* --- the one teaching popover (fixed position; flips above/below) ---------- */
+
+.popover {
+  position: fixed;
+  z-index: 60;
+  width: 360px;
+  max-width: calc(100vw - 16px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+  padding: 10px 12px 12px;
+  color: var(--ink);
+}
+.popover.is-above { transform: translateY(-100%); }
+
+.popover-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.popover-back {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.popover-back:hover { color: var(--accent); }
+.popover-path {
+  flex: 1;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.popover-close {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.popover-close:hover { color: var(--bad); }
+
+.popover-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.popover-body {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-line;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+/* --- worked derivations (steps read from the engine's finished result) --- */
+
+.steps-group { margin-bottom: 8px; }
+.steps-group-title {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.steps-row {
+  display: flex;
+  flex-direction: column;
+  padding: 5px 6px;
+  margin-bottom: 4px;
+  background: var(--paper);
+  border-left: 3px solid var(--shear);
+  border-radius: 0 4px 4px 0;
+}
+.steps-formula {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.steps-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+.steps-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--reaction);
+  margin-top: 2px;
+}
+
+/* --- glossary chips inside the window (subs + see-also) ------------------- */
+
+.popover-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.popover-chip {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.popover-chip.is-sub { border-color: var(--shear); }
+.subpop-placeholder {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 6px;
+}
+.subpop-placeholder.hidden { display: none; }
+.popover-chip:hover { border-color: var(--accent); color: var(--accent); }
+.popover-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

@@ -119,6 +119,13 @@ function txt(x, y, str, o = {}) {
   if (o.halo) {
     attrs.style = 'paint-order:stroke;stroke:#ffffff;stroke-width:3.5px;stroke-linejoin:round';
   }
+  // M9: any other option (e.g. 'data-term') passes through onto the text
+  // node — the teaching layer annotates existing labels without touching
+  // their text or position.
+  const KNOWN = ['anchor', 'size', 'fill', 'weight', 'italic', 'halo'];
+  for (const [k, v] of Object.entries(o)) {
+    if (!KNOWN.includes(k) && !(k in attrs)) attrs[k] = String(v);
+  }
   return el('text', attrs, str);
 }
 
@@ -189,7 +196,7 @@ function drawSupport(svg, type, x, yTop) {
 function drawVyArrow(svg, x, label) {
   svg.append(el('line', { x1: x, y1: 172, x2: x, y2: 134, stroke: C.reaction, 'stroke-width': 3 }));
   svg.append(el('polygon', { points: `${x - 6},136 ${x + 6},136 ${x},126`, fill: C.reaction }));
-  svg.append(txt(x, 192, label, { fill: C.reaction, weight: 700, size: 12.5, halo: true }));
+  svg.append(txt(x, 192, label, { fill: C.reaction, weight: 700, size: 12.5, halo: true, 'data-term': 'vertical-reaction' }));
 }
 
 function drawMomentArrow(svg, x, label) {
@@ -205,7 +212,7 @@ function drawMomentArrow(svg, x, label) {
   }));
   // Clamp above the viewBox — the M8 layout audit's cantilever configuration
   // exposed this pre-existing clip (label baseline 10 put the halo at y < 0).
-  svg.append(txt(x, Math.max(cy - r - 10, 16), label, { fill: C.reaction, weight: 700, size: 12.5, halo: true }));
+  svg.append(txt(x, Math.max(cy - r - 10, 16), label, { fill: C.reaction, weight: 700, size: 12.5, halo: true, 'data-term': 'moment-reaction' }));
 }
 
 function drawReactionsM3(svg, result, xm) {
@@ -430,7 +437,7 @@ function drawCombinedResultant(svg, result, xm, placed) {
   svg.append(el('line', { x1: xR, y1: 16, x2: xR, y2: 56, stroke: C.udl, 'stroke-width': 2.5, 'stroke-dasharray': '5 3' }));
   svg.append(el('polygon', { points: `${xR - 6},54 ${xR + 6},54 ${xR},66`, fill: C.udl, opacity: 0.9 }));
   svg.append(txt(rSpot.x, rSpot.y, rLabel, { anchor: rSpot.anchor, fill: C.udl, weight: 700, size: 12.5, halo: true }));
-  svg.append(txt(xR, 252, `x̄ = ${fmt(result.resultant.position)} m`, { fill: C.muted, size: 11, halo: true }));
+  svg.append(txt(xR, 252, `x̄ = ${fmt(result.resultant.position)} m`, { fill: C.muted, size: 11, halo: true, 'data-term': 'centroid' }));
 }
 
 /**
@@ -638,7 +645,7 @@ function renderBDMM3(svg, state, result, xm, determinate) {
   let lx = peakX;
   if (peakX < ML + 130) { anchor = 'start'; lx = peakX + 12; }
   else if (peakX > VB_W - MR - 130) { anchor = 'end'; lx = peakX - 12; }
-  svg.append(txt(lx, labelY, label, { fill: C.moment, weight: 700, halo: true, anchor }));
+  svg.append(txt(lx, labelY, label, { fill: C.moment, weight: 700, halo: true, anchor, 'data-term': 'maximum-moment' }));
 
   xAxisLabels(svg, xm, result, 264);
 }
@@ -670,7 +677,7 @@ function renderDeflectionM3(svg, state, result, xm, determinate) {
   // Exaggeration note + true max sag (real text, screen-reader reachable).
   const mm = max.value * 1000;
   svg.append(txt(ML, 22, `shape exaggerated ×${fmt(factor)} — true max deflection ${fmt(mm)} mm (${max.sign}) at x = ${fmt(max.position)} m · E·I = ${fmt(EI)} kN·m²`, {
-    anchor: 'start', fill: C.muted, italic: true, size: 11, halo: true,
+    anchor: 'start', fill: C.muted, italic: true, size: 11, halo: true, 'data-term': 'exaggeration',
   }));
 
   // The curve (down-positive v plots below the undeformed line).
@@ -684,7 +691,7 @@ function renderDeflectionM3(svg, state, result, xm, determinate) {
   svg.append(el('circle', { cx: maxX, cy: maxY, r: 4.5, fill: C.defl, stroke: '#ffffff', 'stroke-width': 1.5 }));
   svg.append(el('line', { x1: maxX, y1: y0, x2: maxX, y2: maxY, stroke: C.defl, 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
   svg.append(txt(maxX + (maxX < VB_W - MR - 120 ? 10 : -10), maxY + (max.sign === 'down' ? -8 : 16),
-    `vmax = ${fmt(mm)} mm`, { anchor: maxX < VB_W - MR - 120 ? 'start' : 'end', fill: C.defl, weight: 700, size: 12, halo: true }));
+    `vmax = ${fmt(mm)} mm`, { anchor: maxX < VB_W - MR - 120 ? 'start' : 'end', fill: C.defl, weight: 700, size: 12, halo: true, 'data-term': 'max-deflection' }));
 
   // x-axis ticks: 0 and L only (the curve is qualitative; numbers above).
   const tick = (x) => svg.append(el('line', { x1: x, y1: y0 + 16, x2: x, y2: y0 + 24, stroke: C.axis, 'stroke-width': 1.2 }));
@@ -747,6 +754,21 @@ function cardNode(c) {
   node.append(h('span', 'card-label', c.label));
   node.append(h('span', 'card-value', c.value));
   if (c.sub) node.append(h('span', 'card-sub', c.sub));
+  // M9 teaching door: solved cards carry data-steps (their worked derivation,
+  // from explain.js over the FINISHED result); unsolved cards carry a glossary
+  // term explaining WHY they show '–'. Label text is untouched (the annotation
+  // rule), and tabindex/role/aria make the door keyboard-reachable.
+  if (c.steps) {
+    node.setAttribute('data-steps', c.steps);
+    node.setAttribute('tabindex', '0');
+    node.setAttribute('role', 'button');
+    node.setAttribute('aria-label', `How was this calculated? — ${c.label}`);
+  } else if (c.term) {
+    node.setAttribute('data-term', c.term);
+    node.setAttribute('tabindex', '0');
+    node.setAttribute('role', 'button');
+    node.setAttribute('aria-label', `Why? — ${c.label}`);
+  }
   return node;
 }
 
@@ -761,15 +783,20 @@ function renderResultCards(doc, state, result) {
       value: `${fmt(result.maxMoment.value)} kNm`,
       sub: `${result.maxMoment.sign} · at x = ${fmt(result.maxMoment.position)} m`,
       accent: true,
+      steps: 'Max bending moment',
     });
     cards.push({
       label: 'Max deflection',
       value: `${fmt(result.deflection.max.value * 1000)} mm`,
       sub: `${result.deflection.max.sign} · at x = ${fmt(result.deflection.max.position)} m · E·I = ${fmt(result.deflection.EI)} kN·m²`,
+      steps: 'Max deflection',
     });
+    // One door per solved GROUP (the first reaction card opens the reactions
+    // derivation; the rest open the same group) — every card is still a door.
+    for (const c of cards) if (!c.steps && !c.term) c.steps = 'Reactions';
   } else {
-    cards.push({ label: 'Reactions', value: '–', sub: 'not solved by statics' });
-    cards.push({ label: 'Max bending moment', value: '–', sub: 'not solved by statics' });
+    cards.push({ label: 'Reactions', value: '–', sub: 'not solved by statics', term: 'statically-indeterminate' });
+    cards.push({ label: 'Max bending moment', value: '–', sub: 'not solved by statics', term: 'statically-indeterminate' });
   }
 
   // Load description (intensity, resultant, centroid, arms) lives on the beam

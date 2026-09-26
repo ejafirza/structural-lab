@@ -85,8 +85,27 @@ civil/structural engineering students, built around the loop
     sagging beam deflects downward); EI·v″ = −M in this convention.
   - Honesty unchanged: determinate beams only; indeterminate/unstable keep
     the placeholder and hide the E·I control.
-- Roadmap after M8: UI consolidation pass (the parked declutter list) →
-  AI tutor layer.
+- Roadmap after M9: M10 shell pass (two-column layout, dark mode, editor
+  fold, badge relocation) → AI tutor layer.
+
+## Teaching layer (M9)
+
+- **Every underlined term explains itself.** Click any dotted-underlined term
+  (Loads, Shear force V(x), Bending moment M(x), Deflected shape v(x), units,
+  the determinacy badge, the equilibrium badge) or any ℹ mark (supports,
+  E·I, stiffness presets) and a small popover opens with a plain-language
+  explanation — hand-written, no AI. Inside a window, sub-concepts are
+  clickable chips with a breadcrumb (Supports › Pin support › Vertical
+  reaction), so nothing is more than a click away; Escape or click-outside
+  closes.
+- **Every result card is a "how?" door.** Click a reactions / max-moment /
+  max-deflection card to see the step-by-step derivation with the engine's
+  own numbers (`Mmax = P·a·b / L → 15 kNm`). The steps are read from the
+  finished result — never recomputed — and a test enforces that identity.
+  Indeterminate beams get the classification explanation instead: the tool
+  explains why it refuses, never invents numbers.
+- New modules: `src/glossary.js` (the dictionary), `src/explain.js` (the
+  derivation formatter), `ui/popover.js` (the one-window component).
 
 ## Quick start
 
@@ -94,14 +113,14 @@ Requires Node.js ≥ 18. Zero dependencies, no install step.
 
 ```bash
 npm start      # start the app → http://localhost:8000 (browser opens)
-npm test       # run the full automated suite (143 tests)
+npm test       # run the full automated suite (167 tests)
 npm run demo   # ASCII text demo of the engine (Milestone 1)
 ```
 
 > ⚠️ Open the app via `npm start`, not by double-clicking `ui/index.html` —
 > browsers block ES-module imports over `file://`.
 
-**Testing & quality:** 143 automated tests (`npm test`, Node's built-in runner —
+**Testing & quality:** 167 automated tests (`npm test`, Node's built-in runner —
 analytical cases with independently known textbook values, render smoke tests
 against a fake DOM, and static source guards proving the UI contains no
 engineering formulas), plus headless-browser verification harnesses in
@@ -151,11 +170,14 @@ src/loadmodel.js     load-type catalog + descriptor normalization (1..6 loads) �
                      (M7: `profile` descriptor, `MAX_PROFILE_POINTS`, `emitDescriptor`)
 src/analysis.js      analyzeBeam() dispatcher: point/UDL/linear solvers + combined (M6)
                      + profile kernels & routing (M7) + elastic curve (M8)
+src/glossary.js      M9 teaching dictionary — hand-written explanations (pure data)
+src/explain.js       M9 derivation formatter over finished results (reads, never recomputes)
 src/demo.js          ASCII demo of the engine (M1)
 ui/index.html        shell + layout (load list since M6, shape-point table since M7,
-                     E·I control + deflection panel since M8)
+                     E·I control + deflection panel since M8, teaching triggers since M9)
 ui/app.js            state + input wiring + engine adapter (ONLY importer of the engine;
                      M7: point-list internal model, shape-point table, profile handles)
+ui/popover.js        M9 one-window teaching popover (breadcrumb, a11y, flip)
 ui/render.js         M2 reference renderers (simply supported point load) — FROZEN
 ui/renderm3.js       support- & load-aware renderers (multi-load M6, profile band +
                      per-point handles M7, deflection panel M8)
@@ -178,9 +200,12 @@ test/profile.test.js       M7 profile solver — Cases A–G (20)
 test/ui-m7.test.js         M7 render + emit rule + point-table interaction (5)
 test/deflection.test.js    M8 elastic curve — Cases A–L (12)
 test/ui-m8.test.js         M8 deflection panel + E·I wiring (4)
+test/glossary.test.js      M9 teaching-dictionary integrity (6)
+test/explain.test.js       M9 derivation identity + honesty (9)
+test/ui-m9.test.js         M9 card doors + popover behaviour (8)
 docs/                original owner briefs (v1 product brief + M2 UI brief)
 verify/              browser-level CDP verification harnesses (see verify/readme.md)
-plan-m4.md … plan-m8.md   milestone plans (the plan-before-code record)
+plan-m4.md … plan-m9.md   milestone plans (the plan-before-code record)
 ```
 
 > **Filename-casing note:** on-disk filenames and ES-module import specifiers
@@ -290,12 +315,13 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
 
 ## Testing & verification
 
-- `npm test` runs **143 tests**: 9 M1 engine + 5 M2 render + 6 classification +
+- `npm test` runs **167 tests**: 9 M1 engine + 5 M2 render + 6 classification +
   8 M3 solver + 5 M3 render + 13 load-model + 9 UDL solver + 4 UDL render +
   11 linear solver + 7 linear render + 14 multi-load solver + 8 multi-load render +
   3 interaction source guard (the M6.5 drag-repair guard, extended for the M7
   handles) + 20 profile solver (plan-m7 Cases A–G) + 5 M7 render/interaction +
-  12 deflection solver (plan-m8 Cases A–L) + 4 M8 render/interaction.
+  12 deflection solver (plan-m8 Cases A–L) + 4 M8 render/interaction +
+  6 M9 glossary integrity + 9 M9 explain/identity + 8 M9 render/popover.
 - **M7 solver coverage**: stepped profile with an interior peak, collinear
   profile ≡ frozen linear solver to 1e-9, gap profile with the `V ≡ 0`
   plateau, both cantilevers, honesty (indeterminate/unstable), validation
@@ -311,6 +337,13 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
   order independence, 1/EI linearity, honesty (no block when not solved),
   EI validation + default, derivative identities (dθ/dx = −M/EI,
   d²v/dx² = −M/EI on clean stencils), and pure-add-on determinism.
+- **M9 teaching-layer coverage**: glossary integrity (no dead links, no
+  orphans, size caps, the exact SVG touchpoint set, pin = 2 / roller = 1 /
+  fixed = 3 reactions stated correctly); derivation identity (every step's
+  value traces to the engine result — the one allowed transformation is the
+  m → mm unit conversion; classification-only honesty for unsolved beams;
+  no result mutation); popover behaviour (single window, breadcrumb drill,
+  Escape/click-outside, aria-expanded, no innerHTML, fail-soft unknowns).
 - **Browser-level verification** (headless Edge via CDP): consolidation
   harnesses (32 functional checks, 6 layout checks — the M5 regression
   anchors) + multi-load harnesses (22 functional checks: add/select/remove,
@@ -321,7 +354,13 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
   regression, honesty, cap; 8 layout configurations including the 6-point
   worst case) + deflection harnesses (15 functional checks: panel + card
   hand values, E·I chips/slider/field, cantilever tip, honesty, EI
-  persistence; 8 four-panel layout configurations). Harnesses live in
+  persistence; 8 four-panel layout configurations) + teaching harnesses
+  (22 functional checks: chip → glossary entry, two-level drill with
+  breadcrumb + back, Escape close, derivation doors quoting the cards' own
+  numbers verbatim — 15 kNm point / 9 kNm UDL anchors — equilibrium badge,
+  honesty doors for pin+pin, viewport fit; 13 layout checks: the 8 standard
+  SVG configurations + popover viewport fit, trigger overlap, 360 px flip,
+  scrollable body). Harnesses live in
   [`verify/`](verify/readme.md):
   `node verify/consolidation-cdp-verify.mjs`,
   `node verify/consolidation-layout-check.mjs`,

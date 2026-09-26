@@ -26,8 +26,11 @@
 import { analyzeBeam, DEFAULT_EI } from '../src/analysis.js';
 import { MAX_LOADS, MAX_PROFILE_POINTS, emitDescriptor } from '../src/loadmodel.js';
 import { SUPPORTS } from '../src/supportmodel.js';
+import { getTerm } from '../src/glossary.js';
+import { groupForCard } from '../src/explain.js';
 import { renderM3, BAND_Y_BASE, BAND_MAX_H } from './renderm3.js';
 import { makeXMap, fmt } from './render.js';
+import { initTeachingPopover } from './popover.js';
 
 const state = {
   span: 6,
@@ -98,6 +101,7 @@ function solveAndRender() {
   }
   $('validation-msg').hidden = true;
   lastDeterminate = result.classification.status === 'determinate';
+  lastResult = result; // M9: the derivation popovers read THIS object, never re-solve
   renderM3(document, state, result);
   syncSelectedControls(); // determinacy may have flipped → E·I control follows
 }
@@ -593,6 +597,9 @@ const getSel = () => selected();
 /** Determinacy of the CURRENT beam — cheap, from the last solved state. */
 let lastDeterminate = true;
 
+/** The last solved result — content provider for the M9 derivation doors. */
+let lastResult = null;
+
 function isSelectedDeterminate() {
   return lastDeterminate;
 }
@@ -889,6 +896,29 @@ function makeBeamDraggable(svg) {
   });
 }
 
+// --- M9 teaching layer (glossary popovers + worked derivations) -------------
+
+/**
+ * One delegated popover for the whole page (ui/popover.js), fed by the two
+ * pure content modules: the hand-written glossary and the derivation
+ * formatter over the FINISHED result. Bound only when the host environment
+ * provides document-level events — the fake-DOM test shims (the ui-m7/m8
+ * pattern) have no addEventListener, and the teaching layer must stay as
+ * invisible to them as the deflection panel is to pre-M8 fixtures (the
+ * optional-DOM contract renderM3 already applies).
+ */
+function initTeaching() {
+  if (typeof document.addEventListener !== 'function') return;
+  initTeachingPopover(document, {
+    getGlossary: (key) => getTerm(key),
+    getSteps: (label) => {
+      if (!lastResult || lastResult.classification.status !== 'determinate') return [];
+      const g = groupForCard(lastResult, label);
+      return g ? [g] : [];
+    },
+  });
+}
+
 // --- boot --------------------------------------------------------------------
 
 bindPresets();
@@ -896,6 +926,7 @@ populateSupportSelects();
 bindLoadListButtons();
 bindPointsEditor();
 bindEI();
+initTeaching();
 syncSelectedControls();
 rebuildLoadList();
 makeBeamDraggable(document.getElementById('beam-svg'));

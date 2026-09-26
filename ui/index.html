@@ -15,18 +15,20 @@
         <p class="tagline">Interactive Structural Analysis Learning Laboratory</p>
       </div>
     </div>
-    <div id="eq-badge" class="eq-badge" role="status" aria-live="polite"></div>
+    <div id="eq-badge" class="eq-badge" role="status" aria-live="polite" data-term="equilibrium-check" tabindex="0"></div>
   </header>
 
   <p id="validation-msg" class="validation-msg" role="alert" hidden></p>
 
   <main class="lab">
+    <p class="term-hint">Underlined terms and <span aria-hidden="true">ℹ</span> marks explain themselves — click any of them. Nothing is hidden from the calculation; the explanations are extra.</p>
+
     <!-- ============================ INPUTS ============================ -->
     <section class="panel inputs" aria-label="Model inputs">
       <h2>Model <span class="panel-sub">what you change</span></h2>
       <div class="controls">
         <div class="ctl" id="ctl-loadlist">
-          <span class="ctl-label" id="loadlist-label">Loads <span id="load-count" class="list-count"></span></span>
+          <span class="ctl-label" id="loadlist-label"><span data-term="loads">Loads</span> <span id="load-count" class="list-count"></span></span>
           <div class="load-list" id="load-list" role="group" aria-labelledby="loadlist-label"></div>
           <div class="load-add-row">
             <button type="button" id="btn-add-point" class="load-add">+ Point load</button>
@@ -35,18 +37,18 @@
           <p id="load-status" class="visually-hidden" role="status" aria-live="polite"></p>
         </div>
         <div class="ctl">
-          <label for="sel-support-left">Support at A (left end)</label>
+          <label for="sel-support-left">Support at A (left end) <button type="button" class="term-chip" data-term="supports" aria-label="What do supports do?">ℹ</button></label>
           <select id="sel-support-left" class="support-select"></select>
         </div>
         <div class="ctl">
-          <label for="sel-support-right">Support at B (right end)</label>
+          <label for="sel-support-right">Support at B (right end) <button type="button" class="term-chip" data-term="supports" aria-label="What do supports do?">ℹ</button></label>
           <select id="sel-support-right" class="support-select"></select>
         </div>
         <div class="ctl">
           <label for="num-span">Span L</label>
           <div class="ctl-row">
             <input id="num-span" type="number" min="1" max="20" step="0.1" inputmode="decimal" />
-            <span class="unit">m</span>
+            <span class="unit" data-term="units">m</span>
           </div>
           <input id="slider-span" class="slider" type="range" min="1" max="20" step="0.1" aria-label="Beam span in metres" />
         </div>
@@ -54,7 +56,7 @@
           <label for="num-load">Load P ↓</label>
           <div class="ctl-row">
             <input id="num-load" type="number" min="0.1" max="100" step="0.1" inputmode="decimal" />
-            <span class="unit">kN</span>
+            <span class="unit" data-term="units">kN</span>
           </div>
           <input id="slider-load" class="slider" type="range" min="0.1" max="100" step="0.1" aria-label="Point load magnitude in kilonewtons" />
         </div>
@@ -62,29 +64,29 @@
           <label for="num-pos">Load position a (from A)</label>
           <div class="ctl-row">
             <input id="num-pos" type="number" min="0" step="0.01" inputmode="decimal" />
-            <span class="unit">m</span>
+            <span class="unit" data-term="units">m</span>
           </div>
           <input id="slider-pos" class="slider" type="range" min="0" step="0.01" aria-label="Load position from left end, in metres" />
           <p class="hint">…or drag the load arrow on the beam ↔</p>
         </div>
         <div class="ctl" id="ctl-ei">
-          <label for="num-ei">Beam stiffness E·I</label>
+          <label for="num-ei">Beam stiffness E·I <button type="button" class="term-chip" data-term="beam-stiffness" aria-label="What is beam stiffness?">ℹ</button></label>
           <div class="ctl-row">
             <input id="num-ei" type="number" min="1" max="1000000" step="10" inputmode="decimal" />
-            <span class="unit">kN·m²</span>
+            <span class="unit" data-term="units">kN·m²</span>
           </div>
           <input id="slider-ei" class="slider" type="range" min="2" max="6.3" step="0.01" aria-label="Beam stiffness E times I, on a logarithmic scale, in kilonewton metres squared" />
-          <span class="ctl-label" id="ei-presets-label">Stiffness presets</span>
+          <span class="ctl-label" id="ei-presets-label"><span data-term="stiffness-presets">Stiffness presets</span></span>
           <div class="preset-chips" id="ei-chips" role="group" aria-labelledby="ei-presets-label"></div>
           <p class="hint">How stiff the beam is — bigger E·I, smaller sag.</p>
         </div>
         <div class="ctl" id="ctl-presets" hidden>
-          <span class="ctl-label" id="presets-label">Presets</span>
+          <span class="ctl-label" id="presets-label"><span data-term="load-presets">Presets</span></span>
           <div class="preset-chips" id="preset-chips" role="group" aria-labelledby="presets-label"></div>
           <p class="hint">Starting configurations — one editor; adjust freely after.</p>
         </div>
         <div class="ctl" id="ctl-points" hidden>
-          <span class="ctl-label" id="points-label">Shape points <span id="point-count" class="list-count"></span></span>
+          <span class="ctl-label" id="points-label"><span data-term="profile">Shape points</span> <span id="point-count" class="list-count"></span></span>
           <div class="point-table" id="point-table" role="group" aria-labelledby="points-label"></div>
           <button type="button" id="btn-add-cp" class="point-add">+ Add point</button>
           <p class="hint">Intensity follows straight lines through the points. Same x on two rows = a step.</p>
@@ -93,7 +95,7 @@
           <label for="num-region-start">Region start x₁ (from A)</label>
           <div class="ctl-row">
             <input id="num-region-start" type="number" min="0" step="0.1" inputmode="decimal" />
-            <span class="unit">m</span>
+            <span class="unit" data-term="units">m</span>
           </div>
           <input id="slider-region-start" class="slider" type="range" min="0" step="0.1" aria-label="Loaded region start from left end, in metres" />
         </div>
@@ -101,7 +103,7 @@
           <label for="num-region-end">Region end x₂ (from A)</label>
           <div class="ctl-row">
             <input id="num-region-end" type="number" min="0" step="0.1" inputmode="decimal" />
-            <span class="unit">m</span>
+            <span class="unit" data-term="units">m</span>
           </div>
           <input id="slider-region-end" class="slider" type="range" min="0" step="0.1" aria-label="Loaded region end from left end, in metres" />
           <p class="hint">…or drag the dashed region handles on the beam ↔</p>
@@ -110,7 +112,7 @@
           <label for="num-w1">Intensity at start w₁ ↓</label>
           <div class="ctl-row">
             <input id="num-w1" type="number" min="0" max="50" step="0.1" inputmode="decimal" />
-            <span class="unit">kN/m</span>
+            <span class="unit" data-term="units">kN/m</span>
           </div>
           <input id="slider-w1" class="slider" type="range" min="0" max="50" step="0.1" aria-label="Distributed load intensity at the region start, in kilonewtons per metre" />
         </div>
@@ -118,7 +120,7 @@
           <label for="num-w2">Intensity at end w₂ ↓</label>
           <div class="ctl-row">
             <input id="num-w2" type="number" min="0" max="50" step="0.1" inputmode="decimal" />
-            <span class="unit">kN/m</span>
+            <span class="unit" data-term="units">kN/m</span>
           </div>
           <input id="slider-w2" class="slider" type="range" min="0" max="50" step="0.1" aria-label="Distributed load intensity at the region end, in kilonewtons per metre" />
         </div>
@@ -127,8 +129,8 @@
 
     <!-- ============================ READOUTS ============================ -->
     <section class="panel readouts" aria-label="Engineering results">
-      <h2>Results <span class="from-engine">what the structure produces</span></h2>
-      <div id="det-badge" class="det-badge" role="status" aria-live="polite">–</div>
+      <h2>Results <span class="from-engine">what the structure produces</span> <button type="button" class="term-chip" data-term="determinacy" aria-label="What does statically determinate mean?">ℹ</button></h2>
+      <div id="det-badge" class="det-badge" role="status" aria-live="polite" data-term="determinacy" tabindex="0">–</div>
       <p id="class-note" class="class-note" hidden></p>
       <div id="result-cards" class="cards"></div>
     </section>
@@ -142,21 +144,21 @@
 
     <!-- ============================ SFD ============================ -->
     <section class="panel" aria-label="Shear force diagram">
-      <h2>Shear force V(x) <span class="panel-sub">kN · positive plotted up</span></h2>
+      <h2><span data-term="shear-force">Shear force V(x)</span> <span class="panel-sub">kN · positive plotted up</span></h2>
       <svg id="sfd-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img"
            aria-label="Shear force diagram"></svg>
     </section>
 
     <!-- ============================ BMD ============================ -->
     <section class="panel" aria-label="Bending moment diagram">
-      <h2>Bending moment M(x) <span class="panel-sub">kNm · tension side: sagging (+) below, hogging (−) above</span></h2>
+      <h2><span data-term="bending-moment">Bending moment M(x)</span> <span class="panel-sub">kNm · tension side: sagging (+) below, hogging (−) above</span></h2>
       <svg id="bmd-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img"
            aria-label="Bending moment diagram"></svg>
     </section>
 
     <!-- ============================ DEFLECTION ============================ -->
     <section class="panel" aria-label="Deflected shape">
-      <h2>Deflected shape v(x) <span class="panel-sub">shape exaggerated for visibility — the true scale is printed on the drawing</span></h2>
+      <h2><span data-term="elastic-curve">Deflected shape v(x)</span> <span class="panel-sub">shape exaggerated for visibility — the true scale is printed on the drawing</span></h2>
       <svg id="defl-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img"
            aria-label="Deflected shape of the beam centreline (elastic curve), drawn exaggerated"></svg>
     </section>

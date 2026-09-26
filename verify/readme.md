@@ -18,10 +18,12 @@ node verify/profile-cdp-verify.mjs           # 30 functional checks — M7 profi
 node verify/profile-layout-check.mjs         # 8 layout checks — profile configurations incl. 6-point worst case
 node verify/deflection-cdp-verify.mjs        # 15 functional checks — M8 elastic curve (panel, card, E·I control)
 node verify/deflection-layout-check.mjs      # 8 layout checks — four-panel configurations incl. cantilever & tiny E·I
+node verify/teaching-cdp-verify.mjs          # 22 functional checks — M9 teaching layer (glossary, drill, derivation doors)
+node verify/teaching-layout-check.mjs        # 13 layout checks — 8 SVG configs + popover geometry (360 px incl.)
 ```
 
 Each script starts `server.js` itself (no need to run `npm start` first), launches
-headless Edge with a remote-debugging port (9336–9346, one per script) and a throwaway
+headless Edge with a remote-debugging port (9336–9348, one per script) and a throwaway
 user-data dir under `verify/tmp/`, drives the UI, asserts DOM state, and fails on any
 console error. Since M6, the harnesses also strip a `PORT` inherited from the outer
 environment (so an outer tool exporting e.g. `PORT=0` cannot rebind the spawned app
@@ -102,5 +104,23 @@ the asserted values and counts are unchanged.
 - **E·I persists across load edits**; indeterminate beams show the panel
   placeholder, drop the card, and hide the E·I control.
 - Layout: no clipping / collisions across all FOUR panels in 8 configurations
+
+## What they assert (teaching pair — M9)
+
+- ℹ chips and underlined terms open the right glossary entry; the window is
+  a non-modal `role="dialog"`; Escape closes; chips drill two levels with a
+  working breadcrumb and back button.
+- **Content honesty in the browser**: pin teaches 2 reactions, fixed 3 (with
+  the moment reaction, not torsion); the equilibrium badge explains the
+  self-check.
+- **Derivation doors quote the cards verbatim**: the Mmax card's popover
+  shows `P·a·b / L` steps with 15 kNm for the default beam and 9 kNm (wL²/8)
+  for the full UDL — the hand anchors, read from the result.
+- Indeterminate beams swap doors: `data-term` explainers ("why it is not
+  solved"), no derivations.
+- Popover geometry: opens fully inside the viewport, never covers its
+  trigger, respects a 360 px viewport, body scrollable for long entries.
+- Layout: the full four-panel audit stays clean in all 8 configurations
+  (M9 touches the renderer's attribute path, so the audit re-runs).
   (default, UDL, cantilever, stepped profile, mixed, long span, tiny E·I,
   indeterminate).
