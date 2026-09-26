@@ -31,6 +31,7 @@ import { groupForCard } from '../src/explain.js';
 import { renderM3, BAND_Y_BASE, BAND_MAX_H } from './renderm3.js';
 import { makeXMap, fmt } from './render.js';
 import { initTeachingPopover } from './popover.js';
+import { initTheme } from './theme.js';
 
 const state = {
   span: 6,
@@ -296,7 +297,9 @@ function updateAddButtons() {
 
 function updateLoadCount() {
   const n = state.loads.length;
-  $('load-count').textContent = n === 1 ? '(1 load)' : `(${n} loads)`;
+  const count = $('load-count');
+  count.textContent = n === 1 ? '1 load' : `${n} loads`;
+  count.setAttribute('aria-label', `${n} ${n === 1 ? 'load' : 'loads'} in the beam`);
 }
 
 /** Selection highlight only — rows keep their DOM identity (and focus). */
@@ -926,6 +929,7 @@ populateSupportSelects();
 bindLoadListButtons();
 bindPointsEditor();
 bindEI();
+initTheme(document);
 initTeaching();
 syncSelectedControls();
 rebuildLoadList();

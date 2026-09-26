@@ -20,10 +20,12 @@ node verify/deflection-cdp-verify.mjs        # 15 functional checks — M8 elast
 node verify/deflection-layout-check.mjs      # 8 layout checks — four-panel configurations incl. cantilever & tiny E·I
 node verify/teaching-cdp-verify.mjs          # 22 functional checks — M9 teaching layer (glossary, drill, derivation doors)
 node verify/teaching-layout-check.mjs        # 13 layout checks — 8 SVG configs + popover geometry (360 px incl.)
+node verify/shell-cdp-verify.mjs              # 22 functional checks — M10 theme, disclosure, Results, live edits
+node verify/shell-layout-check.mjs            # 27 layout checks — M10 responsive shell, diagrams, popovers, themes
 ```
 
 Each script starts `server.js` itself (no need to run `npm start` first), launches
-headless Edge with a remote-debugging port (9336–9348, one per script) and a throwaway
+headless Edge with a remote-debugging port (9336–9350, one per script) and a throwaway
 user-data dir under `verify/tmp/`, drives the UI, asserts DOM state, and fails on any
 console error. Since M6, the harnesses also strip a `PORT` inherited from the outer
 environment (so an outer tool exporting e.g. `PORT=0` cannot rebind the spawned app
@@ -121,6 +123,31 @@ the asserted values and counts are unchanged.
 - Popover geometry: opens fully inside the viewport, never covers its
   trigger, respects a 360 px viewport, body scrollable for long entries.
 - Layout: the full four-panel audit stays clean in all 8 configurations
-  (M9 touches the renderer's attribute path, so the audit re-runs).
   (default, UDL, cantilever, stepped profile, mixed, long span, tiny E·I,
   indeterminate).
+
+## What they assert (shell pair — M10)
+
+**Functional checks (`shell-cdp-verify.mjs`, 22 checks):**
+
+- Default appearance follows the computer's System setting; the button clearly names
+  System/Light/Dark, and Light/Dark choices persist across reload.
+- Light and dark colors remain readable, including the diagrams and the explanation
+  window; System resumes following the device setting.
+- The Model editor opens by default, folds without changing results, and its load count
+  stays current. Classification and Results remain available while it is folded.
+- The equilibrium check lives in Results and still opens its explanation; changing a
+  model value still updates the answer immediately.
+- No browser errors or exceptions during the checks.
+
+**Layout checks (`shell-layout-check.mjs`, 27 checks):**
+
+- At 1440 and 1024 px the Model and Results sit side-by-side; at 980 px and narrower
+  they stack in reading order. Tested widths: 1440, 1024, 980, 768, 560 and 390 px.
+- No page-wide horizontal scrolling; all four diagrams, their labels, and crowded
+  multi-load/profile and cantilever examples remain visible.
+- The moved equilibrium and determinacy explanations fit on desktop and phone without
+  covering their trigger. Dark diagram labels/marker halos match the dark surface.
+- Normal text contrast checks exceed 4.5:1 in both palettes: light primary/muted/status
+  13.65/4.76/6.81:1; dark 16.19/9.89/7.52:1.
+- No browser errors or exceptions during the checks.

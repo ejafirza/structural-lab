@@ -77,24 +77,26 @@ const H_BMD = 270;
 const H_DEFL = 210;
 
 const C = {
-  ink: '#1e293b',
-  muted: '#64748b',
-  beam: '#334155',
-  support: '#334155',
-  load: '#dc2626',
-  udl: '#059669',
-  udlFill: 'rgba(5, 150, 105, 0.12)',
-  reaction: '#16a34a',
-  shear: '#2563eb',
-  shearFill: 'rgba(37, 99, 235, 0.14)',
-  moment: '#ea580c',
-  momentFill: 'rgba(234, 88, 12, 0.15)',
-  defl: '#7c3aed',
-  deflFill: 'rgba(124, 58, 237, 0.10)',
-  guide: '#94a3b8',
-  axis: '#64748b',
-  dim: '#475569',
-  note: '#64748b',
+  ink: 'var(--diagram-ink, #1e293b)',
+  muted: 'var(--diagram-muted, #64748b)',
+  beam: 'var(--diagram-beam, #334155)',
+  support: 'var(--diagram-support, #334155)',
+  load: 'var(--diagram-load, #dc2626)',
+  udl: 'var(--diagram-udl, #059669)',
+  udlFill: 'var(--diagram-udl-fill, rgba(5, 150, 105, 0.12))',
+  reaction: 'var(--diagram-reaction, #16a34a)',
+  shear: 'var(--diagram-shear, #2563eb)',
+  shearFill: 'var(--diagram-shear-fill, rgba(37, 99, 235, 0.14))',
+  moment: 'var(--diagram-moment, #ea580c)',
+  momentFill: 'var(--diagram-moment-fill, rgba(234, 88, 12, 0.15))',
+  defl: 'var(--diagram-deflection, #7c3aed)',
+  deflFill: 'var(--diagram-deflection-fill, rgba(124, 58, 237, 0.10))',
+  guide: 'var(--diagram-guide, #94a3b8)',
+  axis: 'var(--diagram-axis, #64748b)',
+  dim: 'var(--diagram-dim, #475569)',
+  note: 'var(--diagram-muted, #64748b)',
+  halo: 'var(--diagram-halo, #ffffff)',
+  handleFill: 'var(--diagram-handle-fill, #ffffff)',
 };
 
 // --- tiny SVG helpers ------------------------------------------------------
@@ -117,7 +119,7 @@ function txt(x, y, str, o = {}) {
   if (o.weight) attrs['font-weight'] = o.weight;
   if (o.italic) attrs['font-style'] = 'italic';
   if (o.halo) {
-    attrs.style = 'paint-order:stroke;stroke:#ffffff;stroke-width:3.5px;stroke-linejoin:round';
+    attrs.style = `paint-order:stroke;stroke:${C.halo};stroke-width:3.5px;stroke-linejoin:round`;
   }
   // M9: any other option (e.g. 'data-term') passes through onto the text
   // node — the teaching layer annotates existing labels without touching
@@ -391,7 +393,7 @@ function drawDistributedLoad(svg, result, xm, load, index, count, selected, plac
       });
       hg.append(el('rect', { x: p - 16, y: 6, width: 32, height: 64, fill: 'transparent', 'pointer-events': 'all' }));
       hg.append(el('line', { x1: p, y1: 12, x2: p, y2: 64, stroke: C.udl, 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }));
-      hg.append(el('circle', { cx: p, cy: 24, r: 5, fill: '#ffffff', stroke: C.udl, 'stroke-width': 2.5 }));
+      hg.append(el('circle', { cx: p, cy: 24, r: 5, fill: C.handleFill, stroke: C.udl, 'stroke-width': 2.5 }));
       g.append(hg);
     }
   }
@@ -412,7 +414,7 @@ function drawDistributedLoad(svg, result, xm, load, index, count, selected, plac
         'aria-label': `Load ${index + 1} of ${count}, point ${pi + 1} of ${pts.length} — ${fmt(p.w)} kilonewtons per metre at ${fmt(p.x)} metres — drag, or focus and use arrow keys`,
       });
       hg.append(el('circle', { cx: hx, cy: hy, r: 14, fill: 'transparent', 'pointer-events': 'all' }));
-      hg.append(el('circle', { cx: hx, cy: hy, r: 5.5, fill: '#ffffff', stroke: C.udl, 'stroke-width': 2.5 }));
+      hg.append(el('circle', { cx: hx, cy: hy, r: 5.5, fill: C.handleFill, stroke: C.udl, 'stroke-width': 2.5 }));
       g.append(hg);
     });
   }
@@ -637,7 +639,7 @@ function renderBDMM3(svg, state, result, xm, determinate) {
   const peakSigned = sign === 'hogging' ? -Mmax : Mmax;
   const peakY = yOf(peakSigned);
   const peakX = xm.toPx(result.maxMoment.position);
-  svg.append(el('circle', { cx: peakX, cy: peakY, r: 4.5, fill: C.moment, stroke: '#ffffff', 'stroke-width': 1.5 }));
+  svg.append(el('circle', { cx: peakX, cy: peakY, r: 4.5, fill: C.moment, stroke: C.halo, 'stroke-width': 1.5 }));
 
   const label = `Mmax = ${fmt(Mmax)} kNm (${sign})  at x = ${fmt(result.maxMoment.position)} m`;
   const labelY = sign === 'hogging' ? peakY - 18 : peakY + 34;
@@ -688,7 +690,7 @@ function renderDeflectionM3(svg, state, result, xm, determinate) {
   // Max-sag marker (same dot style as the BMD peak).
   const maxX = xm.toPx(max.position);
   const maxY = yOf(max.sign === 'down' ? max.value : -max.value);
-  svg.append(el('circle', { cx: maxX, cy: maxY, r: 4.5, fill: C.defl, stroke: '#ffffff', 'stroke-width': 1.5 }));
+  svg.append(el('circle', { cx: maxX, cy: maxY, r: 4.5, fill: C.defl, stroke: C.halo, 'stroke-width': 1.5 }));
   svg.append(el('line', { x1: maxX, y1: y0, x2: maxX, y2: maxY, stroke: C.defl, 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
   svg.append(txt(maxX + (maxX < VB_W - MR - 120 ? 10 : -10), maxY + (max.sign === 'down' ? -8 : 16),
     `vmax = ${fmt(mm)} mm`, { anchor: maxX < VB_W - MR - 120 ? 'start' : 'end', fill: C.defl, weight: 700, size: 12, halo: true, 'data-term': 'max-deflection' }));

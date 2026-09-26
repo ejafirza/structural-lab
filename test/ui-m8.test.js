@@ -104,8 +104,8 @@ test('deflection panel: curve mirrors the engine samples, note carries the true 
   );
   assert.ok(texts.some((t) => t.includes(`vmax = ${mm} mm`)), 'max-sag label present');
 
-  const circles = svg.findAll((n) => n.nodeName === 'circle' && n.attrs.stroke === '#ffffff');
-  assert.equal(circles.length, 1, 'one max-sag marker dot');
+  const circles = svg.findAll((n) => n.nodeName === 'circle' && n.attrs.stroke === 'var(--diagram-halo, #ffffff)');
+  assert.equal(circles.length, 1, 'one max-sag marker dot with a background-aware theme halo');
 });
 
 test('deflection card joins the results panel with mm value, position and EI', () => {

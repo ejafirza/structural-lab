@@ -203,14 +203,14 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
     const vh = Number(doc.documentElement?.clientHeight) || (typeof window !== 'undefined' ? Number(window.innerHeight) : 0) || 900;
     let left = t.left + t.width / 2 - WIDTH / 2;
     left = Math.max(EDGE, Math.min(left, vw - WIDTH - EDGE));
-    const above = t.bottom + 8 + 300 > vh && t.top - 8 - 300 > 0;
+    const spaceBelow = vh - t.bottom - EDGE - 8;
+    const spaceAbove = t.top - EDGE - 8;
+    const above = spaceBelow < 300 && spaceAbove > spaceBelow;
+    const available = Math.max(120, (above ? spaceAbove : spaceBelow) - 2);
     win.style.left = `${Math.round(left)}px`;
     win.style.top = above ? `${Math.round(t.top - 8)}px` : `${Math.round(t.bottom + 8)}px`;
+    win.style.maxHeight = `${Math.floor(available)}px`;
     win.classList.toggle('is-above', above);
-    if (typeof win.getBoundingClientRect === 'function') {
-      const r = win.getBoundingClientRect();
-      if (r.bottom > vh - EDGE) win.style.maxHeight = `${Math.round(vh - t.bottom - 2 * EDGE)}px`;
-    }
   }
 
   function closeWindow() {

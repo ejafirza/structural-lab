@@ -85,8 +85,12 @@ civil/structural engineering students, built around the loop
     sagging beam deflects downward); EI·v″ = −M in this convention.
   - Honesty unchanged: determinate beams only; indeterminate/unstable keep
     the placeholder and hide the E·I control.
-- Roadmap after M9: M10 shell pass (two-column layout, dark mode, editor
-  fold, badge relocation) → AI tutor layer.
+- **Milestone 10 — complete**: a simpler, responsive app shell for the academic
+  visual lab. Desktop uses a Model column beside the Results and diagrams; narrow
+  screens stack them in reading order. The Model editor folds without losing values,
+  appearance can follow System or be set to Light/Dark, and the equilibrium check is
+  beside the other Results. Existing calculations and explanations are unchanged.
+- Roadmap after M10: future AI tutor layer; the current lab remains useful on its own.
 
 ## Teaching layer (M9)
 
@@ -107,27 +111,43 @@ civil/structural engineering students, built around the loop
 - New modules: `src/glossary.js` (the dictionary), `src/explain.js` (the
   derivation formatter), `ui/popover.js` (the one-window component).
 
+## Application shell (M10)
+
+- The lab keeps its academic purpose: change a model, see the beam diagrams update,
+  and open clear explanations when a term or result is unfamiliar.
+- On wide screens the **Model** editor sits beside **Results** and the four diagrams;
+  on smaller screens these stack in a natural reading order. There is no horizontal
+  page scrolling at the tested phone widths.
+- The Model editor can be folded and reopened without resetting any inputs. Its heading
+  shows the current load count. The equilibrium self-check now sits with Results.
+- The appearance button cycles **System → Light → Dark** and remembers only this visual
+  preference. System follows the device setting; theme storage is optional, so blocked
+  browser storage does not prevent the lab from working.
+- Labels were shortened only where they repeated information. Units, sign conventions,
+  true deflection values, result names, explanations and the educational disclaimer
+  remain available. M10 changed no engineering calculations.
+
 ## Quick start
 
 Requires Node.js ≥ 18. Zero dependencies, no install step.
 
 ```bash
 npm start      # start the app → http://localhost:8000 (browser opens)
-npm test       # run the full automated suite (167 tests)
+npm test       # run the full automated suite (180 tests)
 npm run demo   # ASCII text demo of the engine (Milestone 1)
 ```
 
 > ⚠️ Open the app via `npm start`, not by double-clicking `ui/index.html` —
 > browsers block ES-module imports over `file://`.
 
-**Testing & quality:** 167 automated tests (`npm test`, Node's built-in runner —
-analytical cases with independently known textbook values, render smoke tests
-against a fake DOM, and static source guards proving the UI contains no
-engineering formulas), plus headless-browser verification harnesses in
-[`verify/`](verify/readme.md) (functional + layout audits, zero-console-error
-checks). CI runs the suite on Node 20 and 22 against a case-sensitive
-filesystem. Educational tool — **not** a professional design-verification
-system.
+**Testing & quality:** 180 automated tests (`npm test`, Node's built-in runner —
+analytical cases with independently known textbook values, render checks, shell and
+theme checks, and source guards proving the UI contains no engineering formulas), plus
+12 headless-browser verification harnesses in [`verify/`](verify/readme.md). Together
+these cover working controls, explanations, themes and layouts from desktop to phone;
+they check for visible layout problems and browser errors. CI runs the unit suite on
+Node 20 and 22 against a case-sensitive filesystem. Educational tool — **not** a
+professional design-verification system.
 
 ## License
 
@@ -173,15 +193,17 @@ src/analysis.js      analyzeBeam() dispatcher: point/UDL/linear solvers + combin
 src/glossary.js      M9 teaching dictionary — hand-written explanations (pure data)
 src/explain.js       M9 derivation formatter over finished results (reads, never recomputes)
 src/demo.js          ASCII demo of the engine (M1)
-ui/index.html        shell + layout (load list since M6, shape-point table since M7,
-                     E·I control + deflection panel since M8, teaching triggers since M9)
+ui/index.html        responsive shell (M10), model controls (load list since M6,
+                     shape-point table since M7, E·I since M8), teaching triggers (M9)
 ui/app.js            state + input wiring + engine adapter (ONLY importer of the engine;
-                     M7: point-list internal model, shape-point table, profile handles)
-ui/popover.js        M9 one-window teaching popover (breadcrumb, a11y, flip)
+                     M7: point-list internal model, shape-point table, profile handles;
+                     M10: appearance boot + load-count summary)
+ui/theme.js          M10 System / Light / Dark preference (presentation only)
+ui/popover.js        M9 one-window teaching popover (breadcrumb, a11y, viewport fit)
 ui/render.js         M2 reference renderers (simply supported point load) — FROZEN
 ui/renderm3.js       support- & load-aware renderers (multi-load M6, profile band +
-                     per-point handles M7, deflection panel M8)
-ui/style.css         styling
+                     per-point handles M7, deflection panel M8, theme tokens M10)
+ui/style.css         layout + light/dark semantic colors (M10)
 server.js            zero-dependency static server (Node http module)
 test/engine.test.js        M1 analytical (9)
 test/ui-smoke.test.js      M2 render (5)
@@ -203,6 +225,8 @@ test/ui-m8.test.js         M8 deflection panel + E·I wiring (4)
 test/glossary.test.js      M9 teaching-dictionary integrity (6)
 test/explain.test.js       M9 derivation identity + honesty (9)
 test/ui-m9.test.js         M9 card doors + popover behaviour (8)
+test/theme.test.js         M10 appearance preference behavior (6)
+test/ui-m10.test.js        M10 shell, content and frozen-boundary contracts (7)
 docs/                original owner briefs (v1 product brief + M2 UI brief)
 verify/              browser-level CDP verification harnesses (see verify/readme.md)
 plan-m4.md … plan-m9.md   milestone plans (the plan-before-code record)
@@ -304,7 +328,7 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
 
 | You want to change… | Edit |
 |---|---|
-| Colors / visual style | `ui/renderm3.js` (palette const `C`) and `ui/style.css` (`:root` vars) |
+| Colors / visual style | `ui/style.css` (light/dark theme variables) and `ui/renderm3.js` (diagram palette tokens) |
 | Support types / names | `src/supportmodel.js` (`SUPPORTS` catalog) |
 | Load types / units | `src/loadmodel.js` (`LOAD_TYPES` catalog) |
 | Input ranges (span/load/w₁/w₂/region) | `ui/app.js` (`bindNumberSlider` min/max) |
@@ -315,13 +339,9 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
 
 ## Testing & verification
 
-- `npm test` runs **167 tests**: 9 M1 engine + 5 M2 render + 6 classification +
-  8 M3 solver + 5 M3 render + 13 load-model + 9 UDL solver + 4 UDL render +
-  11 linear solver + 7 linear render + 14 multi-load solver + 8 multi-load render +
-  3 interaction source guard (the M6.5 drag-repair guard, extended for the M7
-  handles) + 20 profile solver (plan-m7 Cases A–G) + 5 M7 render/interaction +
-  12 deflection solver (plan-m8 Cases A–L) + 4 M8 render/interaction +
-  6 M9 glossary integrity + 9 M9 explain/identity + 8 M9 render/popover.
+- `npm test` runs **180 tests**: 167 M1–M9 regression checks + 6 M10 theme
+  preference checks + 7 M10 shell/presentation checks. Existing analytical values,
+  explanations, and renderer boundaries remain covered.
 - **M7 solver coverage**: stepped profile with an interior peak, collinear
   profile ≡ frozen linear solver to 1e-9, gap profile with the `V ≡ 0`
   plateau, both cantilevers, honesty (indeterminate/unstable), validation
@@ -360,16 +380,9 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
   numbers verbatim — 15 kNm point / 9 kNm UDL anchors — equilibrium badge,
   honesty doors for pin+pin, viewport fit; 13 layout checks: the 8 standard
   SVG configurations + popover viewport fit, trigger overlap, 360 px flip,
-  scrollable body). Harnesses live in
-  [`verify/`](verify/readme.md):
-  `node verify/consolidation-cdp-verify.mjs`,
-  `node verify/consolidation-layout-check.mjs`,
-  `node verify/multi-load-cdp-verify.mjs`,
-  `node verify/multi-layout-check.mjs`,
-  `node verify/profile-cdp-verify.mjs`,
-  `node verify/profile-layout-check.mjs`,
-  `node verify/deflection-cdp-verify.mjs`,
-  `node verify/deflection-layout-check.mjs` (each starts the server itself).
+  scrollable body), plus M10 shell/theme checks (22 functional, 27 layout). All 12
+  browser harnesses are listed in [`verify/`](verify/readme.md); each starts the
+  server itself and checks for browser errors.
 
 ## Educational disclaimer
 
