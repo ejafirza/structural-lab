@@ -44,6 +44,15 @@ test('desktop shell uses named two-column areas and stacks in a mobile reading o
   assert.match(css, /"model results"[\s\S]*"model beam"[\s\S]*"model shear"[\s\S]*"model moment"[\s\S]*"model deflection"/);
   assert.match(css, /@media\s*\(max-width:\s*980px\)/);
   assert.match(css, /"model"[\s\S]*"results"[\s\S]*"beam"[\s\S]*"shear"[\s\S]*"moment"[\s\S]*"deflection"/);
+  assert.match(html, /Click or tap a support symbol to cycle it/);
+  assert.match(html, /desktop-beam-cue[^>]*>Right-click the beam to add a load/);
+  assert.match(css, /\.support-control:focus-visible/);
+  assert.match(css, /\.beam-context-menu\[hidden\]\s*\{\s*display:\s*none;\s*\}/);
+  assert.match(css, /\.teaching-copy\s*\{[^}]*white-space:\s*normal;/);
+  assert.match(css, /Cambria Math[\s\S]*STIX Two Math/);
+  assert.match(read('../src/explain.js'), /Mₘₐₓ = P·a·b \/ L/);
+  assert.match(read('../src/glossary.js'), /ΣFₓ/);
+  assert.ok(html.indexOf('Mₘₐₓ') < 0, 'equation labels are rendered from the analysis renderer rather than duplicated in markup');
   assert.match(html, /id="theme-toggle"/);
   for (const id of ['beam-svg', 'sfd-svg', 'bmd-svg', 'defl-svg']) assert.ok(html.includes(`id="${id}"`));
 });
@@ -53,11 +62,18 @@ test('Model is an open native disclosure and existing controls are still inside 
   assert.match(html, /<details id="model-panel"[^>]*open/);
   assert.match(html, /<summary class="model-summary">[\s\S]*id="load-count"/);
   const start = html.indexOf('<details id="model-panel"');
-  const end = html.lastIndexOf('</details>', html.indexOf('<section class="panel readouts"'));
+  let depth = 0, end = -1;
+  for (const match of html.slice(start).matchAll(/<\/?details\b[^>]*>/g)) {
+    depth += match[0].startsWith('</') ? -1 : 1;
+    if (depth === 0) { end = start + match.index + match[0].length; break; }
+  }
+  assert.ok(start >= 0 && end > start, 'the Model disclosure and nested details have matching boundaries');
   const disclosure = html.slice(start, end);
   for (const id of ['load-list', 'num-span', 'num-load', 'num-pos', 'num-ei', 'sel-support-left', 'sel-support-right', 'point-table', 'btn-add-point', 'btn-add-distributed']) {
     assert.ok(disclosure.includes(`id="${id}"`), `${id} remains in the Model disclosure`);
   }
+  assert.match(disclosure, /<input id="num-ei" type="number"[^>]*step="any"/,
+    'beam stiffness accepts arbitrary positive values, not only multiples of an arbitrary step');
 });
 
 test('equilibrium explanation stays in Results with its live status and M9 trigger', () => {
@@ -93,7 +109,7 @@ test('M11 reduces repeated copy but keeps essential units, sign conventions and 
   const { doc } = renderReferencePointBeam();
   const renderedLabels = doc.getElementById('result-cards').children
     .map((card) => card.children.find((child) => child.className === 'card-label').textContent);
-  assert.deepEqual(renderedLabels, ['Reaction HA', 'Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection'],
+  assert.deepEqual(renderedLabels, ['Reaction H₍A₎', 'Reaction V₍A₎', 'Reaction V₍B₎', 'Max bending moment', 'Max deflection'],
     'M9 derivation card labels remain unchanged');
 });
 
@@ -121,8 +137,8 @@ test('M3 still displays the same engine results and result-card labels after she
   const cards = doc.getElementById('result-cards').children;
   const labels = cards.map((card) => card.children.find((child) => child.className === 'card-label').textContent);
   const values = cards.map((card) => card.children.find((child) => child.className === 'card-value').textContent);
-  assert.deepEqual(labels, ['Reaction HA', 'Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection']);
-  assert.deepEqual(values, ['0 kN', '5 kN', '5 kN', '15 kNm', `${fmt(result.deflection.max.value * 1000)} mm`]);
+  assert.deepEqual(labels, ['Reaction H₍A₎', 'Reaction V₍A₎', 'Reaction V₍B₎', 'Max bending moment', 'Max deflection']);
+  assert.deepEqual(values, ['0 kN', '5 kN', '5 kN', '15 kN·m', `${fmt(result.deflection.max.value * 1000)} mm`]);
   assert.equal(doc.getElementById('eq-badge').textContent, 'Balanced ✓');
   assert.equal(doc.getElementById('eq-badge').getAttribute('aria-label'), 'Balanced. Activate to inspect the equilibrium residuals.');
   const texts = doc.getElementById('beam-svg').findAll((n) => n.nodeName === 'text').map((n) => n.textContent);

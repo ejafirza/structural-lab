@@ -59,8 +59,8 @@ test('default point beam: individual reaction cards and peak moment quote the ha
   }
   const moment = groupForCard(result, 'Max bending moment');
   assert.equal(moment.steps[0].value, null, 'the method explanation does not repeat the answer');
-  assert.ok(moment.steps.some((step) => step.value === 15), 'Mmax is 15 kNm');
-  assert.ok(moment.steps.some((step) => step.title === 'Substitute the given values' && step.substitution === 'Mmax = 10 × 3 × 3 / 6 kNm'));
+  assert.ok(moment.steps.some((step) => step.value === 15), 'Mₘₐₓ is 15 kN·m');
+  assert.ok(moment.steps.some((step) => step.title === 'Substitute the given values' && step.substitution === 'Mₘₐₓ = 10 × 3 × 3 / 6 kN·m'));
   assert.ok(moment.steps.some((step) => step.explanation.includes('directly under the point load')));
 });
 
@@ -102,7 +102,7 @@ test('every displayed reaction card routes to that component and support side', 
     ['Reaction HA', 'Hx', 'left'], ['Reaction VA', 'Vy', 'left'], ['Reaction VB', 'Vy', 'right'],
   ]) {
     const item = groupForCard(result, label);
-    assert.ok(item.title.includes(`${key === 'Hx' ? 'H' : 'V'}${side === 'left' ? 'A' : 'B'}`), label);
+    assert.ok(item.title.includes(`${key === 'Hx' ? 'H' : 'V'}₍${side === 'left' ? 'A' : 'B'}₎`), label);
     assert.ok(item.steps.some((step) => step.value === result.reactions[side][key]), label);
   }
   assert.equal(groupForCard(result, 'Unknown card'), null);
@@ -114,9 +114,9 @@ test('cantilever reaction explanations use the wall outputs and actual load arm 
     const side = supports.left === 'fixed' ? 'left' : 'right';
     const letter = side === 'left' ? 'A' : 'B';
     const reaction = groupForCard(result, `Reaction M${letter}`);
-    assert.ok(reaction.steps.some((step) => step.equation.includes('ΣMwall = 0')));
+    assert.ok(reaction.steps.some((step) => step.equation.includes('ΣM₍wall₎ = 0')));
     assert.ok(reaction.steps.at(-1).value === result.reactions[side].Mz);
-    assert.ok(reaction.steps.some((step) => step.substitution.includes(`M${letter} = 10 × ${side === 'left' ? '2' : '4'} kNm`)));
+    assert.ok(reaction.steps.some((step) => step.substitution.includes(`M₍${letter}₎ = 10 × ${side === 'left' ? '2' : '4'} kN·m`)));
 
     const moment = groupForCard(result, 'Max bending moment');
     assert.equal(moment.steps.at(-1).value, result.maxMoment.value);
@@ -128,15 +128,15 @@ test('cantilever reaction explanations use the wall outputs and actual load arm 
 test('standard deflection equations are limited to the cases they describe', () => {
   const centered = analyzeBeam({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 3 }], supports: pinRoller });
   const centerStep = groupForCard(centered, 'Max deflection').steps[0];
-  assert.equal(centerStep.equation, 'vmax = P·L³ / (48·E·I)');
+  assert.equal(centerStep.equation, 'vₘₐₓ = P·L³ / (48·E·I)');
   const centerSubstitution = groupForCard(centered, 'Max deflection').steps[1];
   assert.equal(centerSubstitution.title, 'Substitute the given values');
-  assert.equal(centerSubstitution.substitution, 'vmax = 10 × 6³ / (48 × 20000) m');
+  assert.equal(centerSubstitution.substitution, 'vₘₐₓ = 10 × 6³ / (48 × 20000) m');
 
   const cantileverLeft = analyzeBeam({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 2 }], supports: { left: 'fixed', right: 'free' } });
-  assert.equal(groupForCard(cantileverLeft, 'Max deflection').steps[1].substitution, 'vtip = 10 × 2² × (3 × 6 − 2) / (6 × 20000) m');
+  assert.equal(groupForCard(cantileverLeft, 'Max deflection').steps[1].substitution, 'vₜᵢₚ = 10 × 2² × (3 × 6 − 2) / (6 × 20000) m');
   const cantileverRight = analyzeBeam({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 4 }], supports: { left: 'free', right: 'fixed' } });
-  assert.equal(groupForCard(cantileverRight, 'Max deflection').steps[1].substitution, 'vtip = 10 × 2² × (3 × 6 − 2) / (6 × 20000) m');
+  assert.equal(groupForCard(cantileverRight, 'Max deflection').steps[1].substitution, 'vₜᵢₚ = 10 × 2² × (3 × 6 − 2) / (6 × 20000) m');
 
   const offCenter = analyzeBeam({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 2 }], supports: pinRoller });
   const generalStep = groupForCard(offCenter, 'Max deflection').steps[0];
@@ -145,9 +145,9 @@ test('standard deflection equations are limited to the cases they describe', () 
   assert.ok(!generalStep.equation.includes('48'), 'do not apply the centered-load shortcut off-center');
 
   const udl = analyzeBeam({ span: 6, loads: [{ type: 'udl', intensity: 2 }], supports: pinRoller });
-  assert.equal(groupForCard(udl, 'Max bending moment').steps[1].substitution, 'Mmax = 2 × 6² / 8 kNm');
-  assert.equal(groupForCard(udl, 'Max deflection').steps[0].equation, 'vmax = 5·w·L⁴ / (384·E·I)');
-  assert.equal(groupForCard(udl, 'Max deflection').steps[1].substitution, 'vmax = 5 × 2 × 6⁴ / (384 × 20000) m');
+  assert.equal(groupForCard(udl, 'Max bending moment').steps[1].substitution, 'Mₘₐₓ = 2 × 6² / 8 kN·m');
+  assert.equal(groupForCard(udl, 'Max deflection').steps[0].equation, 'vₘₐₓ = 5·w·L⁴ / (384·E·I)');
+  assert.equal(groupForCard(udl, 'Max deflection').steps[1].substitution, 'vₘₐₓ = 5 × 2 × 6⁴ / (384 × 20000) m');
 
   // The UI's two-point editor emits a full-span uniform load as `linear`.
   const uniformLinear = analyzeBeam({
@@ -155,11 +155,11 @@ test('standard deflection equations are limited to the cases they describe', () 
     loads: [{ type: 'linear', start: 0, end: 6, wStart: 2, wEnd: 2 }],
     supports: pinRoller,
   });
-  assert.equal(groupForCard(uniformLinear, 'Max bending moment').steps[0].equation, 'Mmax = w·L² / 8');
+  assert.equal(groupForCard(uniformLinear, 'Max bending moment').steps[0].equation, 'Mₘₐₓ = w·L² / 8');
   assert.equal(groupForCard(uniformLinear, 'Max bending moment').steps[0].value, null);
-  assert.equal(groupForCard(uniformLinear, 'Max bending moment').steps[1].substitution, 'Mmax = 2 × 6² / 8 kNm');
-  assert.equal(groupForCard(uniformLinear, 'Max deflection').steps[0].equation, 'vmax = 5·w·L⁴ / (384·E·I)');
-  assert.equal(groupForCard(uniformLinear, 'Max deflection').steps[1].substitution, 'vmax = 5 × 2 × 6⁴ / (384 × 20000) m');
+  assert.equal(groupForCard(uniformLinear, 'Max bending moment').steps[1].substitution, 'Mₘₐₓ = 2 × 6² / 8 kN·m');
+  assert.equal(groupForCard(uniformLinear, 'Max deflection').steps[0].equation, 'vₘₐₓ = 5·w·L⁴ / (384·E·I)');
+  assert.equal(groupForCard(uniformLinear, 'Max deflection').steps[1].substitution, 'vₘₐₓ = 5 × 2 × 6⁴ / (384 × 20000) m');
 });
 
 test('mixed and profile cases show actual inputs and the exact method without invented load-resultant values', () => {
@@ -209,6 +209,15 @@ test('equilibrium values are quoted verbatim from the engine residual block', ()
   assert.deepEqual(equilibrium.steps.map((step) => step.value), [
     result.equilibrium.sumFx, result.equilibrium.sumFy, result.equilibrium.sumMz,
   ]);
+  assert.deepEqual(equilibrium.steps.map((step) => step.equation), ['ΣFₓ', 'ΣFᵧ', 'ΣMₐ']);
+
+  const rightCantilever = analyzeBeam({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 4 }], supports: { left: 'free', right: 'fixed' } });
+  const labels = derivationGroups(rightCantilever).flatMap((item) => item.steps.map((step) => `${step.equation} ${step.substitution}`)).join(' ');
+  for (const symbol of ['ΣFᵧ', 'ΣM₍wall₎', 'V₍wall₎', 'M₍wall₎', 'M₍B₎']) assert.ok(labels.includes(symbol), symbol);
+
+  const simplySupported = derivationGroups(analyzeBeam({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 2 }], supports: pinRoller }))
+    .flatMap((item) => item.steps.map((step) => `${step.equation} ${step.substitution}`)).join(' ');
+  for (const symbol of ['ΣM₍A₎', 'R₍A₎', 'R₍B₎']) assert.ok(simplySupported.includes(symbol), symbol);
 });
 
 test('unsolved and missing results show classification honesty, never fake engineering answers', () => {

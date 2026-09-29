@@ -11,6 +11,7 @@
 //   P = 10 @ 3 m, fixed+free:  EI·v = P·a²(3L−a)/6 = 225 → v = 11.3 mm
 //   timber chip (EI = 500):    v = 45/500 = 90 mm
 import { spawn } from 'node:child_process';
+import { cleanupLegacyBrowserSession } from './legacy-browser-session.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,14 +28,14 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 };
 
-let server, edge;
+let server, edge, profileDir;
 try {
   const childEnv = { ...process.env };
   delete childEnv.PORT;
   server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env: childEnv });
   await sleep(900);
   edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-sync',
-    `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(TMP, 'defl-edge-' + Date.now())}`,
+    `--remote-debugging-port=${PORT}`, `--user-data-dir=${profileDir = path.join(TMP, 'defl-edge-' + Date.now())}`,
     '--window-size=1200,1800', 'about:blank'], { stdio: 'ignore' });
 
   let wsUrl = null;
@@ -178,9 +179,7 @@ try {
   console.error('HARNESS ERROR:', err);
   results.push({ name: 'harness', ok: false });
 } finally {
-  try { edge?.kill(); } catch {}
-  try { server?.kill(); } catch {}
-  await sleep(300);
+  await cleanupLegacyBrowserSession({ edge, server, profileDir, tempRoot: TMP, cdpPort: PORT });
 }
 
 const failed = results.filter((r) => !r.ok);

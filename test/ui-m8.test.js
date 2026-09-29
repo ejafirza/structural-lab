@@ -1,222 +1,322 @@
-/**
- * ui-m8.test.js — UI tests for the deflection panel (Milestone 8).
- * ---------------------------------------------------------------------------
- * Two layers, following the ui-m5..m7 patterns:
- *   1. render tests against the fake DOM (renderm3.js): the elastic-curve
- *      polyline mirrors the engine's sampled v array; the exaggeration note
- *      carries the true mm value; the max marker sits at the engine's
- *      position; indeterminate/unstable get the placeholder.
- *   2. the E·I control wiring in app.js: chips set the value (and highlight
- *      only while matching), the number field and log-slider drive it, and
- *      the control hides for non-determinate beams.
- */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { analyzeBeam, DEFAULT_EI } from '../src/analysis.js';
-import { fmt } from '../ui/render.js';
-
-// --- minimal DOM shim (same pattern as ui-m7) -------------------------------
+import { fmt, makeXMap } from '../ui/render.js';
 
 class FakeNode {
-  constructor(name) {
+  constructor(name, doc = null) {
     this.nodeName = name;
+    this.ownerDocument = doc;
+    this.parentNode = null;
     this.children = [];
     this.attrs = {};
-    this._text = '';
+    this.listeners = {};
+    this.style = {};
+    this.dataset = {};
     this.className = '';
     this.hidden = false;
-    this.dataset = {};
-    this.value = '';
     this.disabled = false;
+    this.value = '';
     this.title = '';
-    this.listeners = {};
+    this._text = '';
   }
-  setAttribute(k, v) { this.attrs[k] = String(v); }
-  getAttribute(k) { return this.attrs[k]; }
-  append(...nodes) { this.children.push(...nodes); }
-  replaceChildren(...nodes) { this.children = [...nodes]; }
-  addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); }
-  dispatchEvent(evt) { for (const fn of this.listeners[evt.type] ?? []) fn(evt); return true; }
-  closest() { return null; }
-  querySelector() { return null; }
-  querySelectorAll() { return []; }
-  set textContent(v) { this._text = String(v); }
-  get textContent() { return this._text; }
+  setAttribute(name, value) { this.attrs[name] = String(value); }
+  getAttribute(name) { return this.attrs[name] ?? null; }
+  append(...nodes) {
+    for (const node of nodes) {
+      node.parentNode = this;
+      node.ownerDocument = this.ownerDocument;
+      this.children.push(node);
+    }
+  }
+  replaceChildren(...nodes) {
+    for (const node of this.children) node.parentNode = null;
+    this.children = [];
+    this._text = '';
+    this.append(...nodes);
+  }
+  addEventListener(type, listener) { (this.listeners[type] ??= []).push(listener); }
+  dispatchEvent(event) {
+    event.target ??= this;
+    event.preventDefault ??= () => { event.defaultPrevented = true; };
+    event.stopPropagation ??= () => { event.cancelBubble = true; };
+    for (let node = this; node; node = node.parentNode) {
+      for (const listener of node.listeners?.[event.type] ?? []) listener(event);
+      if (event.cancelBubble) break;
+    }
+    if (!event.cancelBubble) {
+      for (const listener of this.ownerDocument?.listeners?.[event.type] ?? []) listener(event);
+    }
+    return !event.defaultPrevented;
+  }
+
+  closest(selector) {
+    if (!selector.startsWith('[') || !selector.endsWith(']')) return null;
+    const [name, rawValue] = selector.slice(1, -1).split('=');
+    const value = rawValue?.replaceAll('"', '');
+    for (let node = this; node; node = node.parentNode) {
+      if (node.attrs[name] != null && (value == null || node.attrs[name] === value)) return node;
+    }
+    return null;
+  }
+  contains(target) { return target === this || this.children.some((child) => child.contains(target)); }
+  querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
+  querySelectorAll(selector) {
+    if (selector === 'button') return this.findAll((node) => node !== this && node.nodeName === 'button');
+    if (!selector.startsWith('[') || !selector.endsWith(']')) return [];
+    const [name, rawValue] = selector.slice(1, -1).split('=');
+    const value = rawValue?.replaceAll('"', '');
+    return this.findAll((node) => node !== this && node.attrs[name] != null
+      && (value == null || node.attrs[name] === value));
+  }
+  getBoundingClientRect() { return { width: 206, height: 116 }; }
+  focus() { if (this.ownerDocument) this.ownerDocument.activeElement = this; }
+  setPointerCapture() {}
+  releasePointerCapture() {}
   get classList() {
-    const self = this;
+    const node = this;
+    const classes = () => new Set(node.className.split(/\s+/).filter(Boolean));
     return {
-      toggle(cls, on) {
-        const set = new Set(String(self.className).split(' ').filter(Boolean));
-        if (on) set.add(cls); else set.delete(cls);
-        self.className = [...set].join(' ');
+      toggle(name, force) {
+        const set = classes();
+        if (force === undefined ? !set.has(name) : force) set.add(name);
+        else set.delete(name);
+        node.className = [...set].join(' ');
       },
-      add(cls) { this.toggle(cls, true); },
-      remove(cls) { this.toggle(cls, false); },
+      add(name) { this.toggle(name, true); },
+      remove(name) { this.toggle(name, false); },
+      contains(name) { return classes().has(name); },
     };
   }
-  focus() {}
-  findAll(pred, out = []) {
-    if (pred(this)) out.push(this);
-    for (const c of this.children) c.findAll(pred, out);
+  set textContent(value) { this.children = []; this._text = String(value); }
+  get textContent() { return this._text + this.children.map((child) => child.textContent).join(''); }
+  findAll(predicate, out = []) {
+    if (predicate(this)) out.push(this);
+    for (const child of this.children) child.findAll(predicate, out);
     return out;
   }
 }
 
-function makeFakeDoc(extraIds = []) {
-  const ids = ['beam-svg', 'sfd-svg', 'bmd-svg', 'defl-svg', 'det-badge', 'class-note', 'result-cards', 'eq-badge', ...extraIds];
-  const byId = Object.fromEntries(ids.map((id) => [id, new FakeNode('div')]));
+function makeDoc(extraIds = []) {
+  const ids = [
+    'beam-svg', 'sfd-svg', 'bmd-svg', 'defl-svg', 'det-badge', 'class-note', 'result-cards', 'eq-badge',
+    'slider-pos', 'validation-msg', 'ctl-load', 'ctl-pos', 'ctl-presets', 'ctl-region-start', 'ctl-region-end',
+    'ctl-w1', 'ctl-w2', 'ctl-points', 'point-count', 'point-table', 'btn-add-cp', 'num-load', 'slider-load',
+    'num-pos', 'num-region-start', 'slider-region-start', 'num-region-end', 'slider-region-end', 'num-w1',
+    'slider-w1', 'num-w2', 'slider-w2', 'num-span', 'slider-span', 'load-status', 'preset-chips',
+    'load-list', 'load-count', 'btn-add-point', 'btn-add-distributed', 'sel-support-left', 'sel-support-right',
+    'ctl-ei', 'num-ei', 'slider-ei', 'ei-chips', 'model-panel', 'beam-context-menu', 'beam-context-title',
+    'beam-context-point', 'beam-context-distributed', ...extraIds,
+  ];
   const doc = {
-    getElementById: (id) => byId[id],
-    createElementNS: (_ns, name) => new FakeNode(name),
-    createElement: (name) => new FakeNode(name),
-    querySelector: () => null,
-    querySelectorAll: () => [],
+    listeners: {}, activeElement: null,
+    addEventListener(type, listener) { (this.listeners[type] ??= []).push(listener); },
+    dispatchEvent(event) {
+      event.preventDefault ??= () => { event.defaultPrevented = true; };
+      for (const listener of this.listeners[event.type] ?? []) listener(event);
+      return !event.defaultPrevented;
+    },
+    createElement: (name) => new FakeNode(name, doc),
+    createElementNS: (_namespace, name) => new FakeNode(name, doc),
   };
-  return doc;
+  const elements = Object.fromEntries(ids.map((id) => [id, new FakeNode(id === 'beam-svg' ? 'svg' : 'div', doc)]));
+  doc.getElementById = (id) => elements[id] ?? null;
+  doc.querySelector = () => null;
+  doc.querySelectorAll = (selector) => {
+    if (selector === '#load-list .load-row > button:first-child') {
+      return elements['load-list'].children.flatMap((row) => row.children.filter((child) => child.nodeName === 'button' && child.className !== 'load-remove'));
+    }
+    const [root, suffix] = selector.split(' ');
+    if (suffix === '.preset-chip') return elements[root.slice(1)].children;
+    if (suffix === '.point-row') return elements[root.slice(1)].children;
+    if (!suffix?.startsWith('[')) return [];
+    const [name, rawValue] = suffix.slice(1, -1).split('=');
+    const value = rawValue?.replaceAll('"', '');
+    return elements[root.slice(1)].findAll((node) => node.attrs[name] != null
+      && (value == null || node.attrs[name] === value));
+  };
+  elements['beam-context-menu'].hidden = true;
+  const beam = elements['beam-svg'];
+  beam.createSVGPoint = () => ({ x: 0, y: 0, matrixTransform() { return this; } });
+  beam.getScreenCTM = () => ({ inverse: () => ({}) });
+  elements['beam-context-menu'].append(elements['beam-context-title'], elements['beam-context-point'], elements['beam-context-distributed']);
+  return { doc, elements };
 }
 
-globalThis.document = makeFakeDoc();
+globalThis.document = makeDoc().doc;
 const { renderM3 } = await import('../ui/renderm3.js');
-
 const pinRoller = { left: 'pin', right: 'roller' };
+let appBoot = 0;
 
-test('deflection panel: curve mirrors the engine samples, note carries the true mm value, marker at the engine max', () => {
-  const result = analyzeBeam({
-    span: 6,
-    loads: [{ type: 'point', magnitude: 10, position: 3 }],
-    supports: pinRoller,
-  });
-  const doc = makeFakeDoc();
+async function bootApp({ desktop = true } = {}) {
+  const { doc, elements } = makeDoc();
+  let isDesktop = desktop;
+  globalThis.document = doc;
+  globalThis.window = {
+    innerWidth: 1280, innerHeight: 900, listeners: {},
+    matchMedia: () => ({ matches: isDesktop }),
+    addEventListener(type, listener) { (this.listeners[type] ??= []).push(listener); },
+    dispatchEvent(event) { for (const listener of this.listeners[event.type] ?? []) listener(event); return true; },
+  };
+  await import(`../ui/app.js?ui-m8-${++appBoot}`);
+  return { doc, elements, setDesktop: (value) => { isDesktop = value; } };
+}
+
+const supportControl = (beam, side) => beam.querySelectorAll('[data-role="support-toggle"]')
+  .find((node) => node.getAttribute('data-support-side') === side);
+const resultDeflection = (elements) => Number(elements['result-cards'].findAll((node) =>
+  node.className === 'card-value' && node.textContent.endsWith('mm'))[0].textContent.replace(' mm', ''));
+const openContextMenu = (beam, x, y = 880) => {
+  const event = { type: 'contextmenu', clientX: x, clientY: y, defaultPrevented: false,
+    preventDefault() { this.defaultPrevented = true; } };
+  beam.dispatchEvent(event);
+  return event;
+};
+
+const stiffness = (elements) => elements['num-ei'].value;
+
+test('deflection drawing is based on engine samples and reports the true deflection', () => {
+  const result = analyzeBeam({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 3 }], supports: pinRoller });
+  const { doc } = makeDoc();
+  globalThis.document = doc;
   renderM3(doc, { span: 6, selectedLoad: 0, supports: pinRoller }, result);
-
-  const svg = doc.getElementById('defl-svg');
-  const polylines = svg.findAll((n) => n.nodeName === 'polyline');
-  assert.equal(polylines.length, 1, 'one elastic-curve polyline');
-  const points = String(polylines[0].attrs.points).split(' ');
-  assert.equal(points.length, result.deflection.v.length, 'one vertex per engine sample');
-
-  const texts = svg.findAll((n) => n.nodeName === 'text').map((n) => n.textContent);
-  const mm = fmt(result.deflection.max.value * 1000);
-  assert.ok(
-    texts.some((t) => t.includes(`${mm} mm`) && t.includes('exaggerated')),
-    `note carries true mm value and the exaggeration wording (looking for ${mm} mm)`
-  );
-  assert.ok(texts.some((t) => t.includes(`vmax = ${mm} mm`)), 'max-sag label present');
-
-  const circles = svg.findAll((n) => n.nodeName === 'circle' && n.attrs.stroke === 'var(--diagram-halo, #ffffff)');
-  assert.equal(circles.length, 1, 'one max-sag marker dot with a background-aware theme halo');
+  const curve = doc.getElementById('defl-svg').findAll((node) => node.nodeName === 'polyline');
+  assert.equal(curve.length, 1);
+  assert.equal(curve[0].attrs.points.split(' ').length, result.deflection.v.length);
+  const labels = doc.getElementById('defl-svg').findAll((node) => node.nodeName === 'text').map((node) => node.textContent);
+  assert.ok(labels.some((text) => text.includes(`${fmt(result.deflection.max.value * 1000)} mm`) && text.includes('exaggerated')));
+  assert.ok(labels.some((text) => text.startsWith('vₘₐₓ = ')));
+  const moment = doc.getElementById('bmd-svg').findAll((node) => node.nodeName === 'text');
+  assert.ok(moment.some((node) => node.textContent.startsWith('Mₘₐₓ = ') && node.textContent.includes('kN·m')));
 });
 
-test('deflection card joins the results panel with mm value, position and EI', () => {
-  const result = analyzeBeam({
-    span: 6,
-    loads: [{ type: 'udl', intensity: 2 }],
-    supports: pinRoller,
-  });
-  const doc = makeFakeDoc();
-  renderM3(doc, { span: 6, selectedLoad: 0, supports: pinRoller }, result);
-  const cards = doc.getElementById('result-cards').findAll((n) => n.className === 'card');
-  const defl = cards.find((c) => c.children.some((k) => k.className === 'card-label' && k.textContent === 'Max deflection'));
-  assert.ok(defl, 'Max deflection card exists');
-  const value = defl.children.find((k) => k.className === 'card-value').textContent;
-  const sub = defl.children.find((k) => k.className === 'card-sub').textContent;
-  assert.ok(value.endsWith('mm'), `card value in mm (got ${value})`);
-  assert.ok(value.includes(fmt(result.deflection.max.value * 1000)), 'card value matches the engine');
-  assert.ok(sub.includes(fmt(result.deflection.EI)), 'card sub carries E·I');
-});
+test('E·I presets, logarithmic slider, deflection response, and visibility remain linked', async () => {
+  const { elements } = await bootApp();
+  const chip = (id) => elements['ei-chips'].children.find((button) => button.dataset.preset === id);
+  assert.equal(elements['ctl-ei'].hidden, false);
+  assert.equal(stiffness(elements), fmt(DEFAULT_EI));
+  chip('steel').dispatchEvent({ type: 'click' });
+  assert.equal(stiffness(elements), fmt(1.8e4));
+  assert.equal(chip('steel').classList.contains('active'), true);
+  elements['num-ei'].value = '12345';
+  elements['num-ei'].dispatchEvent({ type: 'input' });
+  assert.equal(chip('steel').classList.contains('active'), false);
 
-test('indeterminate and unstable: placeholder in the deflection panel, no deflection card', () => {
-  for (const supports of [{ left: 'pin', right: 'pin' }, { left: 'free', right: 'free' }]) {
-    const result = analyzeBeam({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 3 }], supports });
-    const doc = makeFakeDoc();
-    renderM3(doc, { span: 6, selectedLoad: 0, supports }, result);
-    const texts = doc.getElementById('defl-svg').findAll((n) => n.nodeName === 'text').map((n) => n.textContent);
-    assert.ok(texts.some((t) => t.toLowerCase().includes('not solved')), `placeholder shown for ${supports.right}`);
-    const labels = doc.getElementById('result-cards').findAll((n) => n.className === 'card-label').map((n) => n.textContent);
-    assert.ok(!labels.includes('Max deflection'), 'no deflection card');
+  const slider = elements['slider-ei'];
+  slider.value = '4';
+  slider.dispatchEvent({ type: 'input', target: slider });
+  assert.equal(stiffness(elements), fmt(1e4));
+  const before = resultDeflection(elements);
+  slider.value = String(Math.log10(5000));
+  slider.dispatchEvent({ type: 'input', target: slider });
+  assert.ok(resultDeflection(elements) > before, 'lower stiffness produces greater deflection');
+
+  for (const [support, hidden] of [['pin', true], ['roller', false]]) {
+    elements['sel-support-right'].value = support;
+    elements['sel-support-right'].dispatchEvent({ type: 'change', target: elements['sel-support-right'] });
+    assert.equal(elements['ctl-ei'].hidden, hidden);
   }
 });
 
-// --- app.js E·I wiring against the fake DOM ---------------------------------
+test('support controls cycle by click/keyboard and reflect selector changes', async () => {
+  const { doc, elements } = await bootApp();
+  const beam = elements['beam-svg'];
+  for (const [side, key, expected] of [
+    ['left', 'click', 'roller'], ['right', 'Enter', 'fixed'], ['right', ' ', 'free'], ['right', 'click', 'pin'],
+  ]) {
+    const control = supportControl(beam, side);
+    assert.equal(control.getAttribute('role'), 'button');
+    assert.equal(control.getAttribute('tabindex'), '0');
+    control.dispatchEvent(key === 'click' ? { type: 'click' } : { type: 'keydown', key });
+    const updated = supportControl(beam, side);
+    assert.equal(elements[`sel-support-${side}`].value, expected);
+    assert.ok(updated.getAttribute('aria-label').includes(`currently ${expected}`));
+    if (key !== 'click') assert.equal(doc.activeElement, updated);
+  }
+  for (const [side, value] of [['left', 'fixed'], ['left', 'pin'], ['right', 'roller']]) {
+    elements[`sel-support-${side}`].value = value;
+    elements[`sel-support-${side}`].dispatchEvent({ type: 'change', target: elements[`sel-support-${side}`] });
+    assert.ok(supportControl(beam, side).getAttribute('aria-label').includes(`currently ${value}`));
+  }
+});
 
-test('app.js: E·I belongs to the beam, stays visible for point/distributed loads, and hides when indeterminate', async () => {
-  const ids = [
-    'slider-pos', 'validation-msg', 'ctl-load', 'ctl-pos', 'ctl-presets',
-    'ctl-region-start', 'ctl-region-end', 'ctl-w1', 'ctl-w2', 'ctl-points',
-    'point-count', 'point-table', 'btn-add-cp', 'num-load', 'slider-load',
-    'num-pos', 'num-region-start', 'slider-region-start', 'num-region-end',
-    'slider-region-end', 'num-w1', 'slider-w1', 'num-w2', 'slider-w2',
-    'num-span', 'slider-span', 'load-status', 'preset-chips', 'load-list',
-    'load-count', 'btn-add-point', 'btn-add-distributed',
-    'sel-support-left', 'sel-support-right',
-    'ctl-ei', 'num-ei', 'slider-ei', 'ei-chips', 'defl-svg',
-  ];
-  const doc = makeFakeDoc(ids);
-  doc.querySelectorAll = (sel) => {
-    if (sel === '#load-list .load-row > button:first-child') {
-      const wrap = doc.getElementById('load-list');
-      return wrap.children.flatMap((row) =>
-        row.children.filter((c) => c.nodeName === 'button' && !String(c.className).includes('load-remove')));
-    }
-    if (sel === '#preset-chips .preset-chip') return doc.getElementById('preset-chips').children;
-    if (sel === '#point-table .point-row') return doc.getElementById('point-table').children;
-    if (sel === '#ei-chips .preset-chip') return doc.getElementById('ei-chips').children;
-    return [];
-  };
-  globalThis.window = {
-    listeners: {},
-    addEventListener(t, fn) { (this.listeners[t] ??= []).push(fn); },
-    dispatchEvent(evt) { for (const fn of this.listeners[evt.type] ?? []) fn(evt); return true; },
-  };
-  globalThis.document = doc;
-  await import('../ui/app.js');
+test('dragging a beam load handle updates its position', async () => {
+  const { elements } = await bootApp();
+  const beam = elements['beam-svg'];
+  const map = makeXMap({ span: 6 });
+  const handle = beam.findAll((node) => node.getAttribute('data-role') === 'load-handle')[0];
+  handle.dispatchEvent({ type: 'pointerdown', pointerId: 7, clientX: map.toPx(3), clientY: 40 });
+  window.dispatchEvent({ type: 'pointermove', pointerId: 7, clientX: map.toPx(4.2), clientY: 40 });
+  window.dispatchEvent({ type: 'pointerup', pointerId: 7 });
+  assert.ok(Math.abs(Number(elements['num-pos'].value) - 4.2) < 0.02);
+});
 
-  // Default point-load beam: the beam-level control is visible and uses DEFAULT_EI.
-  assert.equal(doc.getElementById('ctl-ei').hidden, false);
-  assert.equal(doc.getElementById('num-ei').value, fmt(DEFAULT_EI));
+test('desktop context chooser stays in bounds and dismisses on Escape or outside click', async () => {
+  const { doc, elements, setDesktop } = await bootApp({ desktop: false });
+  const beam = elements['beam-svg'];
+  const menu = elements['beam-context-menu'];
+  const x = makeXMap({ span: 6 }).toPx(2.4);
+  assert.equal(openContextMenu(beam, x).defaultPrevented, false, 'mobile keeps the browser menu');
+  assert.equal(menu.hidden, true);
 
-  // Steel chip → EI = 1.8e4; chip becomes active.
-  const steel = doc.getElementById('ei-chips').children.find((b) => b.dataset.preset === 'steel');
-  steel.dispatchEvent({ type: 'click' });
-  assert.equal(doc.getElementById('num-ei').value, fmt(1.8e4));
-  assert.ok(String(steel.className).includes('active'), 'chip highlights while matching');
+  setDesktop(true);
+  openContextMenu(beam, x);
+  assert.equal(menu.hidden, false);
+  assert.equal(elements['beam-context-title'].textContent, `Add a load at x = ${fmt(2.4)} m`);
+  openContextMenu(beam, 1279, 899);
+  const { width, height } = menu.getBoundingClientRect();
+  assert.ok(Number.parseFloat(menu.style.left) + width <= 1272);
+  assert.ok(Number.parseFloat(menu.style.top) + height <= 892);
+  const escape = { type: 'keydown', key: 'Escape', target: elements['beam-context-point'] };
+  doc.dispatchEvent(escape);
+  assert.equal(menu.hidden, true);
+  assert.equal(doc.activeElement, beam);
 
-  // Custom value via the number field → the chip clears.
-  const num = doc.getElementById('num-ei');
-  num.value = '12345';
-  num.dispatchEvent({ type: 'input' });
-  assert.ok(!String(steel.className).includes('active'), 'chip clears on custom value');
-  assert.equal(doc.getElementById('num-ei').value, fmt(12345));
+  openContextMenu(beam, x);
+  doc.dispatchEvent({ type: 'click', target: elements['num-span'] });
+  assert.equal(menu.hidden, true);
+});
 
-  // Log slider: mid-range (log10 = 4) → 10⁴.
-  const slider = doc.getElementById('slider-ei');
-  slider.value = '4';
-  slider.dispatchEvent({ type: 'input', target: slider });
-  assert.equal(doc.getElementById('num-ei').value, fmt(1e4));
+test('context chooser adds point and distributed loads through the existing editor', async () => {
+  const { elements } = await bootApp();
+  const beam = elements['beam-svg'];
+  const menu = elements['beam-context-menu'];
+  const map = makeXMap({ span: 6 });
+  openContextMenu(beam, map.toPx(2.4));
+  elements['beam-context-point'].dispatchEvent({ type: 'click' });
+  assert.equal(elements['load-count'].textContent, '2 loads');
+  assert.equal(elements['model-panel'].open, true);
+  assert.equal(Number(elements['num-pos'].value), Number(fmt(2.4)));
+  assert.equal(menu.hidden, true);
 
-  assert.equal(doc.getElementById('ctl-ei').hidden, false);
-  doc.getElementById('btn-add-distributed').dispatchEvent({ type: 'click' });
-  assert.equal(doc.getElementById('ctl-ei').hidden, false, 'stiffness stays visible for distributed loads');
-  doc.getElementById('btn-add-point').dispatchEvent({ type: 'click' });
-  assert.equal(doc.getElementById('ctl-ei').hidden, false, 'stiffness stays visible for point loads');
+  openContextMenu(beam, map.toPx(3));
+  elements['beam-context-distributed'].dispatchEvent({ type: 'click' });
+  assert.equal(elements['load-count'].textContent, '3 loads');
+  assert.equal(elements['ctl-load'].hidden, true);
+  assert.equal(menu.hidden, true);
+});
 
-  // Half the stiffness → double the sag, live (engine re-solve through app).
-  const sagBefore = doc.getElementById('result-cards')
-    .findAll((n) => n.className === 'card-value').map((n) => n.textContent)
-    .find((t) => t.endsWith('mm'));
-  slider.value = String(Math.log10(5000));
-  slider.dispatchEvent({ type: 'input', target: slider });
-  const sagAfter = doc.getElementById('result-cards')
-    .findAll((n) => n.className === 'card-value').map((n) => n.textContent)
-    .find((t) => t.endsWith('mm'));
-  assert.ok(Number(sagAfter.replace(' mm', '')) > Number(sagBefore.replace(' mm', '')),
-    `smaller E·I sags more (${sagBefore} → ${sagAfter})`);
+test('span controls normalize, clamp, and recover blank input', async () => {
+  const { elements } = await bootApp();
+  const number = elements['num-span'];
+  const slider = elements['slider-span'];
+  assert.equal(number.value, '6');
+  assert.equal(slider.value, '6');
+  number.value = '8.05';
+  number.dispatchEvent({ type: 'input' });
+  assert.equal(number.value, '8.1');
+  assert.equal(slider.value, '8.1');
+  number.value = '';
+  number.dispatchEvent({ type: 'blur' });
+  assert.equal(number.value, '8.1');
+  slider.value = '9.2';
+  slider.dispatchEvent({ type: 'input' });
+  assert.equal(number.value, '9.2');
 
-  // Indeterminate beam → control hides; determinate again → it returns.
-  doc.getElementById('sel-support-right').value = 'pin';
-  doc.getElementById('sel-support-right').dispatchEvent({ type: 'change', target: doc.getElementById('sel-support-right') });
-  assert.equal(doc.getElementById('ctl-ei').hidden, true, 'control hidden for pin+pin');
-  doc.getElementById('sel-support-right').value = 'roller';
-  doc.getElementById('sel-support-right').dispatchEvent({ type: 'change', target: doc.getElementById('sel-support-right') });
-  assert.equal(doc.getElementById('ctl-ei').hidden, false, 'control returns for pin+roller');
+  for (const [raw, expected] of [['0', '1'], ['20.05', '20']]) {
+    number.value = raw;
+    number.dispatchEvent({ type: 'input' });
+    assert.equal(number.value, expected);
+    assert.equal(slider.value, expected);
+  }
 });

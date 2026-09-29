@@ -24,6 +24,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** Circled digits ①–⑥ tying each drawn load to its load-list row (M6). */
 const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥'];
+const atSupport = (symbol, letter) => `${symbol}₍${letter}₎`;
 
 // --- label placement (pure geometry — no engineering mathematics) ----------
 
@@ -193,6 +194,36 @@ function drawSupport(svg, type, x, yTop) {
   // 'free': no symbol
 }
 
+function drawInteractiveSupport(svg, side, type, x, yTop) {
+  const letter = side === 'left' ? 'A' : 'B';
+  const label = { pin: 'pin', roller: 'roller', fixed: 'fixed', free: 'free' }[type] ?? type;
+  const group = el('g', {
+    class: 'support-control',
+    'data-role': 'support-toggle',
+    'data-support-side': side,
+    tabindex: 0,
+    role: 'button',
+    'aria-label': `Support ${letter}, currently ${label}; click or press Enter or Space to cycle support type`,
+    'aria-keyshortcuts': 'Enter Space',
+  });
+  if (type === 'free') {
+    group.append(el('circle', { cx: x, cy: yTop + 17, r: 13, fill: 'none', stroke: C.support, 'stroke-width': 2, 'stroke-dasharray': '3 3' }));
+  } else {
+    drawSupport(group, type, x, yTop);
+  }
+  group.append(el('rect', {
+    class: 'support-hit-area',
+    x: x - 32, y: yTop - 5, width: 64, height: 58,
+    fill: 'transparent', 'pointer-events': 'all',
+  }));
+  svg.append(group);
+}
+
+function renderSupports(svg, supports, xA, xB, yTop) {
+  drawInteractiveSupport(svg, 'left', supports.left, xA, yTop);
+  drawInteractiveSupport(svg, 'right', supports.right, xB, yTop);
+}
+
 // --- reaction arrows -------------------------------------------------------
 
 function drawVyArrow(svg, x, label) {
@@ -224,8 +255,8 @@ function drawReactionsM3(svg, result, xm) {
     if (!r || r.type === 'free') continue;
     const bx = side === 'left' ? 0 : input.span;
     const x = xm.toPx(bx);
-    drawVyArrow(svg, x, `V${letter} = ${fmt(r.Vy)} kN`);
-    if (r.type === 'fixed') drawMomentArrow(svg, x, `M${letter} = ${fmt(r.Mz)} kNm`);
+    drawVyArrow(svg, x, `${atSupport('V', letter)} = ${fmt(r.Vy)} kN`);
+    if (r.type === 'fixed') drawMomentArrow(svg, x, `${atSupport('M', letter)} = ${fmt(r.Mz)} kN·m`);
   }
 }
 
@@ -573,8 +604,7 @@ function renderBeamM3(svg, state, result, xm) {
   // Supports
   svg.append(txt(xA, yBeam - 14, `A (${supports.left})`, { size: 11.5, fill: C.muted, halo: true, tabindex: 0, role: 'button', 'data-term': 'supports', 'aria-label': `Explain support A, ${supports.left}` }));
   svg.append(txt(xB, yBeam - 14, `B (${supports.right})`, { size: 11.5, fill: C.muted, halo: true, tabindex: 0, role: 'button', 'data-term': 'supports', 'aria-label': `Explain support B, ${supports.right}` }));
-  drawSupport(svg, supports.left, xA, yBeam + 3);
-  drawSupport(svg, supports.right, xB, yBeam + 3);
+  renderSupports(svg, supports, xA, xB, yBeam + 3);
 
   if (determinate) drawReactionsM3(svg, result, xm);
 
@@ -665,7 +695,7 @@ function renderBDMM3(svg, state, result, xm, determinate) {
   const peakX = xm.toPx(result.maxMoment.position);
   svg.append(el('circle', { cx: peakX, cy: peakY, r: 4.5, fill: C.moment, stroke: C.halo, 'stroke-width': 1.5 }));
 
-  const label = `Mmax = ${fmt(Mmax)} kNm (${sign})  at x = ${fmt(result.maxMoment.position)} m`;
+  const label = `Mₘₐₓ = ${fmt(Mmax)} kN·m (${sign})  at x = ${fmt(result.maxMoment.position)} m`;
   const labelY = sign === 'hogging' ? peakY - 18 : peakY + 34;
   let anchor = 'middle';
   let lx = peakX;
@@ -718,7 +748,7 @@ function renderDeflectionM3(svg, state, result, xm, determinate) {
   svg.append(el('circle', { cx: maxX, cy: maxY, r: 4.5, fill: C.defl, stroke: C.halo, 'stroke-width': 1.5 }));
   svg.append(el('line', { x1: maxX, y1: y0, x2: maxX, y2: maxY, stroke: C.defl, 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
   svg.append(txt(maxX + (maxX < VB_W - MR - 120 ? 10 : -10), maxY + (max.sign === 'down' ? -8 : 16),
-    `vmax = ${fmt(mm)} mm`, { anchor: maxX < VB_W - MR - 120 ? 'start' : 'end', fill: C.defl, weight: 700, size: 12, halo: true, 'data-term': 'max-deflection', tabindex: 0, role: 'button', 'aria-label': 'Explain maximum deflection' }));
+    `vₘₐₓ = ${fmt(mm)} mm`, { anchor: maxX < VB_W - MR - 120 ? 'start' : 'end', fill: C.defl, weight: 700, size: 12, halo: true, 'data-term': 'max-deflection', tabindex: 0, role: 'button', 'aria-label': 'Explain maximum deflection' }));
 
   // x-axis ticks: 0 and L only (the curve is qualitative; numbers above).
   const tick = (x) => svg.append(el('line', { x1: x, y1: y0 + 16, x2: x, y2: y0 + 24, stroke: C.axis, 'stroke-width': 1.2 }));
@@ -764,14 +794,14 @@ function renderClassNote(doc, result) {
 
 function reactionCards(result) {
   const NAME = { Hx: 'H', Vy: 'V', Mz: 'M' };
-  const UNIT = { Hx: 'kN', Vy: 'kN', Mz: 'kNm' };
+  const UNIT = { Hx: 'kN', Vy: 'kN', Mz: 'kN·m' };
   const out = [];
   for (const [side, letter] of [['left', 'A'], ['right', 'B']]) {
     const r = result.reactions[side];
     for (const [comp, val] of Object.entries(r)) {
       if (comp === 'type') continue;
       out.push({
-        label: `Reaction ${NAME[comp]}${letter}`,
+        label: `Reaction ${atSupport(NAME[comp], letter)}`,
         value: `${fmt(val)} ${UNIT[comp]}`,
         steps: `Reaction ${NAME[comp]}${letter}`,
       });
@@ -811,7 +841,7 @@ function renderResultCards(doc, state, result) {
     cards.push(...reactionCards(result));
     cards.push({
       label: 'Max bending moment',
-      value: `${fmt(result.maxMoment.value)} kNm`,
+      value: `${fmt(result.maxMoment.value)} kN·m`,
       sub: `${result.maxMoment.sign} · at x = ${fmt(result.maxMoment.position)} m`,
       accent: true,
       steps: 'Max bending moment',

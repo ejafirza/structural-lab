@@ -12,6 +12,7 @@
 //   R = 36 kN, x̄ = 3.5 m, RA = 15 kN, RB = 21 kN,
 //   x* = 27/8 = 3.375 m, Mmax = 441/16 ≈ 27.5625 → "27.6 kNm".
 import { spawn } from 'node:child_process';
+import { cleanupLegacyBrowserSession } from './legacy-browser-session.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,7 +29,7 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 };
 
-let server, edge;
+let server, edge, profileDir;
 try {
   // Sanitize the inherited environment: a PORT exported by an outer tool
   // (e.g. a dev-server host setting PORT=0) must not rebind our app server
@@ -38,7 +39,7 @@ try {
   server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env: childEnv });
   await sleep(900);
   edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-sync',
-    `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(TMP, 'profile-edge-' + Date.now())}`,
+    `--remote-debugging-port=${PORT}`, `--user-data-dir=${profileDir = path.join(TMP, 'profile-edge-' + Date.now())}`,
     '--window-size=1200,1500', 'about:blank'], { stdio: 'ignore' });
 
   let wsUrl = null;
@@ -159,7 +160,7 @@ try {
   check('Stepped chip: RA = 15 kN, RB = 21 kN',
     s.cards.includes('15 kN') && s.cards.includes('21 kN'), s.cards.join('|'));
   check('Stepped chip: Mmax 27.6 kNm (441/16) at x = 3.38 m (27/8)',
-    s.cards.includes('27.6 kNm') && s.cards.some((v) => v === '27.6 kNm'), s.cards.join('|'));
+    s.cards.includes('27.6 kN·m') && s.cards.some((v) => v === '27.6 kN·m'), s.cards.join('|'));
   check('Stepped chip: combined R = 36 kN, x̄ = 3.5 m on beam',
     s.beamTexts.some((t) => t.includes('R = 36 kN')) && s.beamTexts.some((t) => t.includes('x̄ = 3.5 m')), s.beamTexts.join('|'));
   check('Stepped chip: band label carries the distinct levels (4→8 kN/m)',
@@ -261,7 +262,7 @@ try {
   check('two points again: flat editor returns (emit = linear)',
     s.pointRows === 2 && s.ctlW1Hidden === false, `rows=${s.pointRows}`);
   check('two points again: frozen linear numbers RA = 9, RB = 3, Mmax = 10.1',
-    s.cards.includes('9 kN') && s.cards.includes('3 kN') && s.cards.includes('10.1 kNm'),
+    s.cards.includes('9 kN') && s.cards.includes('3 kN') && s.cards.includes('10.1 kN·m'),
     `cards=${s.cards.join('|')}`);
 
   // 8. honesty: indeterminate with a profile
@@ -302,9 +303,7 @@ try {
   console.error('HARNESS ERROR:', err);
   results.push({ name: 'harness', ok: false });
 } finally {
-  try { edge?.kill(); } catch {}
-  try { server?.kill(); } catch {}
-  await sleep(300);
+  await cleanupLegacyBrowserSession({ edge, server, profileDir, tempRoot: TMP, cdpPort: PORT });
 }
 
 const failed = results.filter((r) => !r.ok);

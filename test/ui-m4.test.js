@@ -85,7 +85,7 @@ test('UDL simply supported: reactions+Mmax in Results, w/R/x̄ on the beam', () 
   // Results panel: reactions + Mmax only.
   const values = cardValues(doc);
   assert.equal(values.filter((v) => v === '6 kN').length, 2, 'VA = VB = 6 kN');
-  assert.ok(values.includes('9 kNm'), 'Mmax = wL²/8 = 9 kNm');
+  assert.ok(values.includes('9 kN·m'), 'Mₘₐₓ = wL²/8 = 9 kN·m');
   assert.ok(cardSubs(doc).some((t) => t.includes('sagging')), 'Mmax labeled sagging');
   assert.ok(!values.includes('2 kN/m'), 'intensity is not a result card');
   assert.ok(!values.includes('12 kN'), 'resultant is not a result card');
@@ -119,7 +119,7 @@ test('UDL cantilever: hogging Mmax above the axis, sign labeled', () => {
 
   const values = cardValues(doc);
   assert.ok(values.includes('12 kN'), 'VA = wL = 12 kN');
-  assert.equal(values.filter((v) => v === '36 kNm').length, 2, 'MA and Mmax both 36 kNm');
+  assert.equal(values.filter((v) => v === '36 kN·m').length, 2, 'M₍A₎ and Mₘₐₓ both 36 kN·m');
   assert.ok(cardSubs(doc).some((t) => t.includes('hogging')), 'Mmax labeled hogging');
 
   assert.ok(bmdPeakY(doc) < bmdAxisY(doc), 'UDL hogging peak above the axis');

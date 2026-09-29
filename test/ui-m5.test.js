@@ -82,7 +82,7 @@ test('partial UDL: R and x̄ contextual on the beam, not in Results', () => {
   // Results panel: reactions + Mmax only.
   const values = cardValues(doc);
   assert.equal(values.filter((v) => v === '4 kN').length, 2, 'VA = VB = 4 kN');
-  assert.ok(values.includes('8 kNm'), 'Mmax = 8 kNm');
+  assert.ok(values.includes('8 kN·m'), 'Mₘₐₓ = 8 kN·m');
   const labels = cardLabels(doc);
   assert.ok(!labels.some((l) => l.includes('Resultant')), 'no Resultant card');
   assert.ok(!labels.some((l) => l.includes('Centroid')), 'no Centroid card');
@@ -112,7 +112,7 @@ test('triangular load: resultant/centroid and peak-side geometry on the beam', (
   const values = cardValues(doc);
   assert.ok(values.includes('12 kN'), 'RA = 12 kN');
   assert.ok(values.includes('6 kN'), 'RB = 6 kN');
-  assert.ok(values.includes('13.9 kNm'), 'Mmax = 8√3 ≈ 13.9 kNm');
+  assert.ok(values.includes('13.9 kN·m'), 'Mₘₐₓ = 8√3 ≈ 13.9 kN·m');
 
   const bt = beamTexts(doc);
   assert.ok(bt.some((t) => t.includes('w: 6 → 0 kN/m')), 'intensity range 6 → 0');
@@ -136,7 +136,7 @@ test('trapezoidal load: distinct endpoint intensities + R/x̄ on the beam', () =
   const values = cardValues(doc);
   assert.ok(values.includes('8 kN'), 'RA = 8 kN');
   assert.ok(values.includes('10 kN'), 'RB = 10 kN');
-  assert.ok(values.includes('13.5 kNm'), 'Mmax ≈ 13.5 kNm');
+  assert.ok(values.includes('13.5 kN·m'), 'Mₘₐₓ ≈ 13.5 kN·m');
 
   const bt = beamTexts(doc);
   assert.ok(bt.some((t) => t.includes('w: 2 → 4 kN/m')), 'intensity range 2 → 4');

@@ -1,6 +1,7 @@
 // Consolidated-UI layout health check: text clipping (overflow beyond SVG
 // viewBox) and label collisions, across point + all 5 distributed presets.
 import { spawn } from 'node:child_process';
+import { cleanupLegacyBrowserSession } from './legacy-browser-session.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,7 +12,7 @@ const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const PORT = 9340;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-let server, edge;
+let server, edge, profileDir;
 try {
     // Sanitize the inherited environment: a PORT exported by an outer tool
   // (e.g. a dev-server host setting PORT=0) must not rebind our app server
@@ -21,7 +22,7 @@ try {
   server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env: childEnv });
   await sleep(900);
   edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-sync',
-    `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(TMP, 'consol-lay-' + Date.now())}`,
+    `--remote-debugging-port=${PORT}`, `--user-data-dir=${profileDir = path.join(TMP, 'consol-lay-' + Date.now())}`,
     '--window-size=1200,1500', 'about:blank'], { stdio: 'ignore' });
 
   let wsUrl = null;
@@ -127,7 +128,5 @@ try {
 } catch (err) {
   console.error('HARNESS ERROR:', err);
 } finally {
-  try { edge?.kill(); } catch {}
-  try { server?.kill(); } catch {}
-  await sleep(300);
+  await cleanupLegacyBrowserSession({ edge, server, profileDir, tempRoot: TMP, cdpPort: PORT });
 }

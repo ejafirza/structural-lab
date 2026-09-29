@@ -10,6 +10,7 @@ const resultStep = (title, explanation, equation, substitution, value, unit, fin
   title, explanation, equation, substitution, value, unit, final,
 });
 const group = (title, intro, given, steps) => ({ title, intro, given, steps });
+const atSupport = (symbol, letter) => `${symbol}₍${letter}₎`;
 
 function inputSummary(result) {
   const { input } = result;
@@ -76,8 +77,8 @@ function engineMomentResult(result) {
   return resultStep(
     'Report the engine result',
     'This is the maximum moment reported by the analysis.',
-    'Mmax', `Sign: ${result.maxMoment.sign}; position x = ${n3(result.maxMoment.position)} m`,
-    result.maxMoment.value, 'kNm', true,
+    'Mₘₐₓ', `Sign: ${result.maxMoment.sign}; position x = ${n3(result.maxMoment.position)} m`,
+    result.maxMoment.value, 'kN·m', true,
   );
 }
 
@@ -96,28 +97,28 @@ function deflectionMethod(load, input, EI) {
   const cantilever = cantileverSupports(supports);
   if (load?.type === 'point' && !cantilever && Math.abs(load.position - span / 2) < 1e-9) {
     return {
-      formula: 'vmax = P·L³ / (48·E·I)',
+      formula: 'vₘₐₓ = P·L³ / (48·E·I)',
       explanation: 'Simply supported beam with a point load at midspan.',
-      substitution: `vmax = ${n3(load.magnitude)} × ${n3(span)}³ / (48 × ${n3(EI)}) m`,
+      substitution: `vₘₐₓ = ${n3(load.magnitude)} × ${n3(span)}³ / (48 × ${n3(EI)}) m`,
     };
   }
   if (load?.type === 'point' && cantilever) {
     const distance = pointLoadDistanceFromFixedEnd(load, supports, span);
     return {
-      formula: 'vtip = P·d²·(3L − d) / (6·E·I)',
+      formula: 'vₜᵢₚ = P·d²·(3L − d) / (6·E·I)',
       explanation: 'For a cantilever with a point load, the greatest deflection is at the free tip; d is measured from the fixed end.',
-      substitution: `vtip = ${n3(load.magnitude)} × ${n3(distance)}² × (3 × ${n3(span)} − ${n3(distance)}) / (6 × ${n3(EI)}) m`,
+      substitution: `vₜᵢₚ = ${n3(load.magnitude)} × ${n3(distance)}² × (3 × ${n3(span)} − ${n3(distance)}) / (6 × ${n3(EI)}) m`,
     };
   }
   if (isFullSpanUniform(load, span)) {
     return {
-      formula: cantilever ? 'vtip = w·L⁴ / (8·E·I)' : 'vmax = 5·w·L⁴ / (384·E·I)',
+      formula: cantilever ? 'vₜᵢₚ = w·L⁴ / (8·E·I)' : 'vₘₐₓ = 5·w·L⁴ / (384·E·I)',
       explanation: cantilever
         ? 'Cantilever with a uniform load over the span.'
         : 'Simply supported beam with a uniform load over the full span.',
       substitution: cantilever
-        ? `vtip = ${n3(uniformIntensity(load))} × ${n3(span)}⁴ / (8 × ${n3(EI)}) m`
-        : `vmax = 5 × ${n3(uniformIntensity(load))} × ${n3(span)}⁴ / (384 × ${n3(EI)}) m`,
+        ? `vₜᵢₚ = ${n3(uniformIntensity(load))} × ${n3(span)}⁴ / (8 × ${n3(EI)}) m`
+        : `vₘₐₓ = 5 × ${n3(uniformIntensity(load))} × ${n3(span)}⁴ / (384 × ${n3(EI)}) m`,
     };
   }
   return {
@@ -139,7 +140,7 @@ function classificationGroups(result) {
   ), resultStep(
     'Compare with the three statics equations',
     'A planar beam has horizontal-force, vertical-force, and moment equilibrium.',
-    'ΣFx = 0,  ΣFy = 0,  ΣM = 0', '3 independent equations', 3, 'equations',
+    'ΣFₓ = 0,  ΣFᵧ = 0,  ΣM = 0', '3 independent equations', 3, 'equations',
   )];
   if (cls.status === 'indeterminate') {
     steps.push(resultStep(
@@ -163,7 +164,7 @@ function reactionsGroup(result, label = 'Reaction VA') {
   const component = label.slice('Reaction '.length, -1);
   const support = result.reactions[side];
   const value = support?.[{ H: 'Hx', V: 'Vy', M: 'Mz' }[component]];
-  const unit = component === 'M' ? 'kNm' : 'kN';
+  const unit = component === 'M' ? 'kN·m' : 'kN';
   const { input } = result;
   const only = input.loads.length === 1 ? input.loads[0] : null;
   const simpleCase = only?.type === 'point' || isFullSpanUniform(only, input.span);
@@ -173,12 +174,12 @@ function reactionsGroup(result, label = 'Reaction VA') {
     steps.push(resultStep(
       'Balance horizontal forces',
       'The model contains vertical loads only, so no horizontal reaction is required.',
-      'ΣFx = 0  →  H' + letter + ' = 0', 'No horizontal applied load', value, unit, true,
+      `ΣFₓ = 0  →  ${atSupport('H', letter)} = 0`, 'No horizontal applied load', value, unit, true,
     ));
   } else if (support.type === 'fixed' && component === 'V') {
     const point = only?.type === 'point';
     const uniform = isFullSpanUniform(only, input.span);
-    const equation = point ? 'ΣFy = 0  →  Vwall = P' : uniform ? 'ΣFy = 0  →  Vwall = w·L' : 'ΣFy = 0  →  Vwall = R';
+    const equation = point ? 'ΣFᵧ = 0  →  V₍wall₎ = P' : uniform ? 'ΣFᵧ = 0  →  V₍wall₎ = w·L' : 'ΣFᵧ = 0  →  V₍wall₎ = R';
     steps.push(resultStep(
       'Balance vertical forces',
       'The fixed end carries the beam’s total downward load.',
@@ -186,18 +187,18 @@ function reactionsGroup(result, label = 'Reaction VA') {
     ));
     if (simpleCase) {
       const substitution = point
-        ? `Vwall = ${n3(only.magnitude)} kN`
-        : `Vwall = ${n3(uniformIntensity(only))} × ${n3(input.span)} kN`;
+        ? `V₍wall₎ = ${n3(only.magnitude)} kN`
+        : `V₍wall₎ = ${n3(uniformIntensity(only))} × ${n3(input.span)} kN`;
       steps.push(substitutionStep(substitution));
     }
   } else if (support.type === 'fixed' && component === 'M') {
     const point = only?.type === 'point';
     const uniform = isFullSpanUniform(only, input.span);
-    const equation = point ? 'ΣMwall = 0  →  Mwall = P·d'
-      : uniform ? 'ΣMwall = 0  →  Mwall = w·L² / 2' : 'ΣMwall = 0';
+    const equation = point ? 'ΣM₍wall₎ = 0  →  M₍wall₎ = P·d'
+      : uniform ? 'ΣM₍wall₎ = 0  →  M₍wall₎ = w·L² / 2' : 'ΣM₍wall₎ = 0';
     const substitution = point
-      ? `M${letter} = ${n3(only.magnitude)} × ${n3(pointLoadDistanceFromFixedEnd(only, input.supports, input.span))} kNm`
-      : uniform ? `M${letter} = ${n3(uniformIntensity(only))} × ${n3(input.span)}² / 2 kNm` : `Engine support moment M${letter} = ${n3(value)} kNm`;
+      ? `${atSupport('M', letter)} = ${n3(only.magnitude)} × ${n3(pointLoadDistanceFromFixedEnd(only, input.supports, input.span))} kN·m`
+      : uniform ? `${atSupport('M', letter)} = ${n3(uniformIntensity(only))} × ${n3(input.span)}² / 2 kN·m` : `Engine support moment ${atSupport('M', letter)} = ${n3(value)} kN·m`;
     if (point || uniform) {
       steps.push(resultStep(
         'Balance moments at the fixed end',
@@ -205,7 +206,7 @@ function reactionsGroup(result, label = 'Reaction VA') {
         equation, '', null, '', false,
       ));
       steps.push(substitutionStep(substitution));
-      steps.push(resultStep('Report the engine result', 'This support moment is reported by the analysis.', `M${letter}`, substitution, value, unit, true));
+      steps.push(resultStep('Report the engine result', 'This support moment is reported by the analysis.', atSupport('M', letter), substitution, value, unit, true));
     } else {
       steps.push(resultStep(
         'Balance moments at the fixed end',
@@ -216,33 +217,33 @@ function reactionsGroup(result, label = 'Reaction VA') {
   } else if (component === 'V' && side === 'right') {
     const point = only?.type === 'point';
     const uniform = isFullSpanUniform(only, input.span);
-    const equation = point ? 'ΣMA = 0  →  RB = P·a / L'
-      : uniform ? 'ΣMA = 0  →  RB = w·L / 2' : 'ΣMA = 0  →  RB = R·x̄ / L';
+    const equation = point ? 'ΣM₍A₎ = 0  →  R₍B₎ = P·a / L'
+      : uniform ? 'ΣM₍A₎ = 0  →  R₍B₎ = w·L / 2' : 'ΣM₍A₎ = 0  →  R₍B₎ = R·x̄ / L';
     steps.push(resultStep(
       'Take moments about A',
       'The support reaction at B balances the moment of the combined load resultant about A.',
       equation, '', null, '', false,
     ));
     if (point) {
-      steps.push(substitutionStep(`RB = ${n3(only.magnitude)} × ${n3(only.position)} / ${n3(input.span)} kN`));
+      steps.push(substitutionStep(`${atSupport('R', 'B')} = ${n3(only.magnitude)} × ${n3(only.position)} / ${n3(input.span)} kN`));
     } else if (uniform) {
-      steps.push(substitutionStep(`RB = ${n3(uniformIntensity(only))} × ${n3(input.span)} / 2 kN`));
+      steps.push(substitutionStep(`${atSupport('R', 'B')} = ${n3(uniformIntensity(only))} × ${n3(input.span)} / 2 kN`));
     }
   } else {
     const point = only?.type === 'point';
     const uniform = isFullSpanUniform(only, input.span);
     const b = input.b ?? input.span - (only?.position ?? 0);
-    const equation = point ? 'ΣMA = 0  →  RA = P·b / L'
-      : uniform ? 'ΣMA = 0  →  RA = w·L / 2' : 'ΣFy = 0  →  RA = R − RB';
+    const equation = point ? 'ΣM₍A₎ = 0  →  R₍A₎ = P·b / L'
+      : uniform ? 'ΣM₍A₎ = 0  →  R₍A₎ = w·L / 2' : 'ΣFᵧ = 0  →  R₍A₎ = R − R₍B₎';
     steps.push(resultStep(
       'Balance moments about A, then vertical forces',
       'The left reaction balances the total downward load and the right support reaction.',
       equation, '', null, '', false,
     ));
     if (point) {
-      steps.push(substitutionStep(`RA = ${n3(only.magnitude)} × ${n3(b)} / ${n3(input.span)} kN`));
+      steps.push(substitutionStep(`${atSupport('R', 'A')} = ${n3(only.magnitude)} × ${n3(b)} / ${n3(input.span)} kN`));
     } else if (uniform) {
-      steps.push(substitutionStep(`RA = ${n3(uniformIntensity(only))} × ${n3(input.span)} / 2 kN`));
+      steps.push(substitutionStep(`${atSupport('R', 'A')} = ${n3(uniformIntensity(only))} × ${n3(input.span)} / 2 kN`));
     }
   }
 
@@ -250,12 +251,12 @@ function reactionsGroup(result, label = 'Reaction VA') {
     steps.push(resultStep(
       'Report the engine result',
       'This reaction is reported by the analysis; the explanation does not solve the beam again.',
-      `${component}${letter}`,
-      `${component}${letter} = ${n3(value)} ${unit}`,
+      atSupport(component, letter),
+      `${atSupport(component, letter)} = ${n3(value)} ${unit}`,
       value, unit, true,
     ));
   }
-  return group(`How reaction ${component}${letter} was found`, `The answer is the ${component === 'M' ? 'support moment' : `${component === 'H' ? 'horizontal' : 'vertical'} reaction`} at ${letter}.`, givenInputs(result), steps);
+  return group(`How reaction ${atSupport(component, letter)} was found`, `The answer is the ${component === 'M' ? 'support moment' : `${component === 'H' ? 'horizontal' : 'vertical'} reaction`} at ${letter}.`, givenInputs(result), steps);
 }
 
 function shearGroup(result) {
@@ -294,22 +295,22 @@ function momentGroup(result) {
       steps.push(resultStep(
         'Use the cantilever point-load moment equation',
         'The largest bending-moment magnitude occurs at the fixed end; d is measured from that wall.',
-        'Mmax = P·d', '', null, '', false,
+        'Mₘₐₓ = P·d', '', null, '', false,
       ));
-      steps.push(substitutionStep(`Mmax = ${n3(only.magnitude)} × ${n3(distance)} kNm`));
+      steps.push(substitutionStep(`Mₘₐₓ = ${n3(only.magnitude)} × ${n3(distance)} kN·m`));
     } else if (isFullSpanUniform(only, input.span)) {
       const intensity = uniformIntensity(only);
       steps.push(resultStep(
         'Use the cantilever full-span uniform-load equation',
         'The largest bending-moment magnitude occurs at the fixed end.',
-        'Mmax = w·L² / 2', '', null, '', false,
+        'Mₘₐₓ = w·L² / 2', '', null, '', false,
       ));
-      steps.push(substitutionStep(`Mmax = ${n3(intensity)} × ${n3(input.span)}² / 2 kNm`));
+      steps.push(substitutionStep(`Mₘₐₓ = ${n3(intensity)} × ${n3(input.span)}² / 2 kN·m`));
     } else {
       steps.push(resultStep(
         'For a cantilever, check the fixed wall',
         'The largest bending-moment magnitude occurs at the fixed end.',
-        'Mmax = |Mwall|', '', null, '', false,
+        'Mₘₐₓ = |M₍wall₎|', '', null, '', false,
       ));
     }
     intro = 'A cantilever’s peak moment is at its fixed wall.';
@@ -319,18 +320,18 @@ function momentGroup(result) {
       steps.push(resultStep(
         'Use the point-load bending-moment equation',
         'For a simply supported beam, the peak is directly under the point load.',
-        'Mmax = P·a·b / L', '', null, '', false,
+        'Mₘₐₓ = P·a·b / L', '', null, '', false,
       ));
-      steps.push(substitutionStep(`Mmax = ${n3(only.magnitude)} × ${n3(only.position)} × ${n3(b)} / ${n3(input.span)} kNm`));
+      steps.push(substitutionStep(`Mₘₐₓ = ${n3(only.magnitude)} × ${n3(only.position)} × ${n3(b)} / ${n3(input.span)} kN·m`));
       intro = 'This is the peak moment for the point load shown on the beam.';
     } else if (isFullSpanUniform(only, input.span)) {
       const intensity = uniformIntensity(only);
       steps.push(resultStep(
         'Use the full-span uniform-load equation',
         'The peak is at midspan for a simply supported beam with a full-span uniform load.',
-        'Mmax = w·L² / 8', '', null, '', false,
+        'Mₘₐₓ = w·L² / 8', '', null, '', false,
       ));
-      steps.push(substitutionStep(`Mmax = ${n3(intensity)} × ${n3(input.span)}² / 8 kNm`));
+      steps.push(substitutionStep(`Mₘₐₓ = ${n3(intensity)} × ${n3(input.span)}² / 8 kN·m`));
       intro = 'This is the peak moment for the uniform load shown on the beam.';
     } else {
       steps.push(resultStep(
@@ -362,9 +363,9 @@ function deflectionGroup(result) {
 function equilibriumGroup(result) {
   const e = result.equilibrium;
   return group('Equilibrium check', 'The engine adds the applied forces and support reactions. Each residual should be zero; tiny rounding residuals are effectively zero.', givenInputs(result), [
-    resultStep('Horizontal forces', 'Sum of horizontal loads and reactions.', 'ΣFx', '', e.sumFx, 'kN'),
-    resultStep('Vertical forces', 'Sum of vertical loads and reactions.', 'ΣFy', '', e.sumFy, 'kN'),
-    resultStep('Moments about A', 'Sum of moments about the left end.', 'ΣMA', '', e.sumMz, 'kNm', true),
+    resultStep('Horizontal forces', 'Sum of horizontal loads and reactions.', 'ΣFₓ', '', e.sumFx, 'kN'),
+    resultStep('Vertical forces', 'Sum of vertical loads and reactions.', 'ΣFᵧ', '', e.sumFy, 'kN'),
+    resultStep('Moments about A', 'Sum of moments about the left end.', 'ΣMₐ', '', e.sumMz, 'kN·m', true),
   ]);
 }
 

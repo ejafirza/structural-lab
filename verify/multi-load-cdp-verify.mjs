@@ -8,6 +8,7 @@
 //   RA = (10·3 + 5·2)/6 = 20/3 ≈ 6.67, RB = 25/3 ≈ 8.33,
 //   Mmax = RA·3 = 20 kNm at the x = 3 jump;  R = 15 kN, x̄ = (10·3 + 5·4)/15.
 import { spawn } from 'node:child_process';
+import { cleanupLegacyBrowserSession } from './legacy-browser-session.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,7 +25,7 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 };
 
-let server, edge;
+let server, edge, profileDir;
 try {
     // Sanitize the inherited environment: a PORT exported by an outer tool
   // (e.g. a dev-server host setting PORT=0) must not rebind our app server
@@ -34,7 +35,7 @@ try {
   server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env: childEnv });
   await sleep(900);
   edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-sync',
-    `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(TMP, 'multi-edge-' + Date.now())}`,
+    `--remote-debugging-port=${PORT}`, `--user-data-dir=${profileDir = path.join(TMP, 'multi-edge-' + Date.now())}`,
     '--window-size=1200,1500', 'about:blank'], { stdio: 'ignore' });
 
   let wsUrl = null;
@@ -134,7 +135,7 @@ try {
   check('two point loads: two rows, summary added', s.loadCount === 2 && s.rowSummaries[1].includes('P = 5 kN'), s.rowSummaries.join('|'));
   check('two point loads: new row auto-selected', s.rowActive[1] === true, JSON.stringify(s.rowActive));
   check('two point loads: RA=6.67, RB=8.33', s.cards.includes('6.67 kN') && s.cards.includes('8.33 kN'), s.cards.join('|'));
-  check('two point loads: Mmax 20 kNm at x=3', s.cards.includes('20 kNm'), s.cards.join('|'));
+  check('two point loads: Mmax 20 kN·m at x=3', s.cards.includes('20 kN·m'), s.cards.join('|'));
   check('two point loads: combined R=15 kN, x̄=3.33 m on beam',
     s.beamTexts.some((t) => t.includes('R = 15 kN')) && s.beamTexts.some((t) => t.includes('x̄ = 3.33 m')), s.beamTexts.join('|'));
   check('two point loads: both load labels numbered on beam',
@@ -238,9 +239,7 @@ try {
   console.error('HARNESS ERROR:', err);
   results.push({ name: 'harness', ok: false });
 } finally {
-  try { edge?.kill(); } catch {}
-  try { server?.kill(); } catch {}
-  await sleep(300);
+  await cleanupLegacyBrowserSession({ edge, server, profileDir, tempRoot: TMP, cdpPort: PORT });
 }
 
 const failed = results.filter((r) => !r.ok);

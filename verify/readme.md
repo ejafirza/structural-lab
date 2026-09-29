@@ -4,8 +4,9 @@ These Node scripts verify the **live app in a real (headless Edge) browser** ove
 Chrome DevTools Protocol — unit tests alone don't prove the UI works.
 
 Relocated on 2026-09-04 from the authoring harness's scratch space (`.openclaw/tmp/`)
-into the project so they survive harness migrations. Only the `ROOT`/`TMP` path
-constants were changed; check logic is untouched.
+into the project so they survive harness migrations. The legacy M5–M10 checks keep their
+assertions and delegate Edge/profile teardown to `legacy-browser-session.mjs`; the M11
+harness owns its newer session lifecycle through `teaching-browser-session.mjs`.
 
 ## Run
 
@@ -25,16 +26,18 @@ node verify/shell-layout-check.mjs            # 27 layout checks — responsive 
 
 The harnesses launch headless Edge with a remote-debugging port and a user-data dir
 under `verify/tmp/`, drive the UI, assert DOM state, and report browser console errors.
-Most start `server.js` themselves (no need to run `npm start` first); the combined M11
-harness serves the same project files from an in-process HTTP server on an ephemeral
-loopback port. `teaching-browser-session.mjs` owns the Edge/profile and CDP transport;
-`teaching-cdp-verify.mjs` contains serial assertions. It uses one Edge process and one
-unique profile, removed only after Edge exit and CDP shutdown are confirmed. If shutdown
-is uncertain, the profile is retained. One M11 run passed all 46 product assertions with
-no console errors, then hit `EBUSY` during cleanup. Bounded retries were added afterward
-but not browser-rerun; `verify/tmp/` is currently empty. M5–M10 browser regressions remain
-pending. Since M6, spawned servers strip inherited `PORT`; CDP harnesses skip `edge://`
-targets when attaching.
+The M5–M10 suites start `server.js` themselves (no need to run `npm start` first); the
+combined M11 harness serves the same project files from an in-process HTTP server on an
+ephemeral loopback port. The M5–M10 scripts use `legacy-browser-session.mjs` for owned
+Edge-tree shutdown, CDP-close confirmation and guarded profile removal; M11 uses
+`teaching-browser-session.mjs`, with serial assertions in `teaching-cdp-verify.mjs`.
+Profiles are removed only after browser shutdown is confirmed. The complete M5–M11 matrix
+was run serially on 2026-09-27: every functional and layout check passed, including
+M11's 46 product assertions plus its cleanup assertion, and the final `verify/tmp/` was
+empty. Before shared teardown was added, legacy runs passed their assertions but left
+stale profile directories because killing the Edge launcher did not close its Windows
+browser child tree. Since M6, spawned servers strip inherited `PORT`; CDP harnesses skip
+`edge://` targets when attaching.
 
 ## Requirements
 
@@ -114,11 +117,12 @@ the asserted values and counts are unchanged.
 
 ## What it asserts (combined teaching + layout run — M11 redesign)
 
-**Current evidence:** one combined M11 run passed **46/46 product checks** on this
-worktree with zero browser console/runtime errors. Its separate profile-cleanup check
-failed once with `EBUSY`; bounded retry logic was added but has not been browser-rerun.
-The owned temp profile was removed after confirming no process referenced it, and
-`verify/tmp/` is currently empty.
+**Current evidence:** the complete M5–M11 browser regression matrix passed serially on
+2026-09-27. The combined M11 run passed **46/46 product checks plus the owned-profile
+cleanup check (47/47 total)** with zero console/runtime errors; Edge/CDP shutdown was
+confirmed and its profile removed. The legacy M5–M10 harnesses also passed all functional
+and layout assertions and, after the cleanup fix, each reported browser resources cleaned.
+`verify/tmp/` is empty after the complete run.
 
 - ℹ buttons and underlined terms open one centered, single-topic accessible dialog only
   after activation; no related-topic chips or breadcrumb navigation. Space/Enter,
@@ -137,8 +141,9 @@ The owned temp profile was removed after confirming no process referenced it, an
   equilibrium accessibility and concise teaching cues are verified.
 - Dialog geometry is checked centered and within desktop and 360 px viewports; its
   content region must support scrolling when needed. The four-panel SVG clipping/collision
-  audit ran across all 8 configurations and passed in the recorded combined M11 run.
-  The cleanup retry remains unverified; M5–M10 browser regressions are still pending.
+  audit ran across all 8 configurations and passed in the combined M11 run. The
+  profile-cleanup assertion passed after the Edge lifecycle fix; M5–M10 browser regressions
+  were also rerun and passed.
 
 ## What they assert (shell pair — M10)
 

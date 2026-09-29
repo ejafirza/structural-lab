@@ -22,6 +22,27 @@
   <p id="validation-msg" class="validation-msg" role="alert" hidden></p>
 
   <main class="lab" id="lab-content">
+    <section class="panel diagram-panel beam-panel" aria-label="Beam diagram">
+      <h2>Beam <span class="panel-sub beam-cue">Click or tap a support symbol to cycle it. <span class="desktop-beam-cue">Right-click the beam to add a load. </span>Hold and drag a load to move it; use Model controls on touch.</span></h2>
+      <svg id="beam-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img" tabindex="-1"
+           aria-label="Beam with two end supports and its loads (point or distributed)"></svg>
+      <div id="beam-context-menu" class="beam-context-menu" role="group" aria-label="Add a load near the selected beam position" hidden>
+        <p id="beam-context-title" class="beam-context-title">Add a load</p>
+        <button id="beam-context-point" type="button">Add point load</button>
+        <button id="beam-context-distributed" type="button">Add distributed load</button>
+      </div>
+    </section>
+
+    <section class="panel readouts" aria-label="Engineering results">
+      <h2>Results</h2>
+      <div class="result-status">
+        <div id="det-badge" class="det-badge" role="status" aria-live="polite" data-term="determinacy" tabindex="0">–</div>
+        <div id="eq-badge" class="eq-badge" role="status" aria-live="polite" data-term="equilibrium-check" tabindex="0"></div>
+      </div>
+      <p id="class-note" class="class-note" hidden></p>
+      <div id="result-cards" class="cards"></div>
+    </section>
+
     <details id="model-panel" class="panel inputs model-disclosure" open aria-label="Model inputs">
       <summary class="model-summary">
         <span class="model-title" role="heading" aria-level="2">Model</span>
@@ -130,7 +151,7 @@
           <div class="ctl">
             <label for="num-ei"><span data-term="beam-stiffness" tabindex="0" role="button">E·I</span> <button type="button" class="term-chip" data-term="beam-stiffness" aria-label="About beam stiffness">ℹ</button></label>
             <div class="ctl-row">
-              <input id="num-ei" type="number" min="1" max="1000000" step="10" inputmode="decimal" />
+              <input id="num-ei" type="number" min="1" max="1000000" step="any" inputmode="decimal" />
               <span class="unit" data-term="units" tabindex="0" role="button">kN·m²</span>
             </div>
             <input id="slider-ei" class="slider" type="range" min="2" max="6.3" step="0.01" aria-label="Beam stiffness E times I, on a logarithmic scale, in kilonewton metres squared" />
@@ -145,21 +166,7 @@
       </div>
     </details>
 
-    <section class="panel readouts" aria-label="Engineering results">
-      <h2>Results</h2>
-      <div class="result-status">
-        <div id="det-badge" class="det-badge" role="status" aria-live="polite" data-term="determinacy" tabindex="0">–</div>
-        <div id="eq-badge" class="eq-badge" role="status" aria-live="polite" data-term="equilibrium-check" tabindex="0"></div>
-      </div>
-      <p id="class-note" class="class-note" hidden></p>
-      <div id="result-cards" class="cards"></div>
-    </section>
 
-    <section class="panel diagram-panel beam-panel" aria-label="Beam diagram">
-      <h2>Beam</h2>
-      <svg id="beam-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img"
-           aria-label="Beam with two end supports and its loads (point or distributed)"></svg>
-    </section>
 
     <section class="panel diagram-panel shear-panel" aria-label="Shear force diagram">
       <h2><span data-term="shear-force" tabindex="0" role="button">Shear force V(x)</span> <span class="diagram-cue">kN · positive plots up</span></h2>

@@ -75,33 +75,44 @@ try {
   const loadLabelButton = tree.find((node) => node.role?.value === 'button' && node.name?.value === 'Explain point load');
   check('accessibility tree separates the load label from its position slider', !!loadLabelButton && !!loadPositionSlider);
   let state = JSON.parse(await snapshot());
-  check('page loads with unchanged standard result cards', state.cards.some((card) => card.value === '15 kNm'));
+  check('page loads with unchanged standard result cards', state.cards.some((card) => card.value === '15 kN·m'));
   check('concise safety note and diagram sign/unit cues remain', await evaluate(`document.querySelectorAll('.foot').length === 1 && document.querySelector('.foot').textContent === 'For learning only—not for structural design verification.' && document.querySelector('.shear-panel .diagram-cue')?.textContent.includes('positive plots up') && document.querySelector('.moment-panel .diagram-cue')?.textContent.includes('sagging (+) below')`));
   check('stiffness remains available with the default point load', state.stiffnessVisible);
 
   // Modal semantics, focus loop, keyboard activation, and close lifecycle.
+  // The support chip lives inside the folded Model disclosure: open it first,
+  // because a real user can only activate rendered triggers.
+  await evaluate(`document.getElementById('model-panel').open = true`);
   await click('label[for="sel-support-left"] .term-chip');
   state = await wait();
   check('support info click opens one Supports topic', state.open && state.title === 'Supports');
   check('dialog has labelled modal semantics and inerts page content', state.role === 'dialog' && state.labelledTitle && state.modal === 'true' && state.inertMain && state.inertHeader);
   check('dialog contains one topic without nested navigation', state.topics === 0);
   check('close receives focus and trigger tracks expanded state', state.active === 'Close explanation' && state.expanded);
-  const centered = await evaluate(`(() => { const r=document.querySelector('.teaching-dialog').getBoundingClientRect(); return Math.abs((r.left+r.right)/2-innerWidth/2)<2 && Math.abs((r.top+r.bottom)/2-innerHeight/2)<2; })()`);
+  // Center against the visible viewport (clientWidth/Height exclude the page
+  // scrollbar that the opened Model disclosure adds).
+  const centered = await evaluate(`(() => { const r=document.querySelector('.teaching-dialog').getBoundingClientRect(); return Math.abs((r.left+r.right)/2-document.documentElement.clientWidth/2)<2 && Math.abs((r.top+r.bottom)/2-document.documentElement.clientHeight/2)<2; })()`);
   check('desktop dialog is centered in the viewport', centered);
 
+  // Focus order for a directly-opened topic: Close, then the body's glossary
+  // links (Back stays hidden without an exploration trail); the probe is
+  // appended last. Tab must advance into the body and wrap at both ends.
   await evaluate(`(() => { const probe=document.createElement('button'); probe.type='button'; probe.className='m11-focus-probe'; probe.textContent='Focus-loop probe'; probe.setAttribute('aria-label','M11 focus probe'); document.querySelector('.teaching-dialog').append(probe); document.querySelector('.teaching-close').focus(); })()`);
   await pressKey('Tab', 'Tab', 9);
   state = JSON.parse(await snapshot());
-  check('real browser Tab advances between dialog controls', state.active === 'M11 focus probe');
+  check('real browser Tab advances between dialog controls', state.active === 'Open definition: Reaction');
+  await evaluate(`document.querySelector('.m11-focus-probe').focus()`);
   await pressKey('Tab', 'Tab', 9);
   state = JSON.parse(await snapshot());
   check('real browser Tab wraps from last control to first', state.active === 'Close explanation');
+  await evaluate(`document.querySelector('.teaching-close').focus()`);
   await pressKey('Tab', 'Tab', 9, 8);
   state = JSON.parse(await snapshot());
   check('real browser Shift+Tab wraps from first control to last', state.active === 'M11 focus probe');
+  await evaluate(`document.querySelector('.m11-focus-probe').focus()`);
   await pressKey('Tab', 'Tab', 9, 8);
   state = JSON.parse(await snapshot());
-  check('real browser Shift+Tab advances back to first control', state.active === 'Close explanation');
+  check('real browser Shift+Tab advances back through body controls', state.active === 'Open definition: Free end');
   await evaluate(`document.querySelector('.m11-focus-probe').remove()`);
   await escape();
   state = JSON.parse(await snapshot());
@@ -114,21 +125,22 @@ try {
   await escape();
 
   // Standard result derivations stay card-specific and trace to the engine.
-  await evaluate(`document.querySelectorAll('#result-cards .card').forEach(card => { if (card.querySelector('.card-label')?.textContent === 'Reaction VB') card.focus(); })`);
+  // Cards carry the ASCII data-steps key; the visible label uses Unicode subscripts.
+  await evaluate(`document.querySelectorAll('#result-cards .card').forEach(card => { if (card.getAttribute('data-steps') === 'Reaction VB') card.focus(); })`);
   await pressKey('Enter', 'Enter', 13);
   state = await wait();
-  check('Enter opens the specific Reaction VB explanation', state.open && state.title.includes('reaction VB'));
-  check('reaction shows equation, substitution and 5 kN engine answer', state.equations.some((equation) => equation.includes('RB = P·a / L')) && state.substitutions.includes('RB = 10 × 3 / 6 kN') && state.values.some((value) => value.includes('5 kN')));
+  check('Enter opens the specific Reaction VB explanation', state.open && state.title.includes('reaction V₍B₎'));
+  check('reaction shows equation, substitution and 5 kN engine answer', state.equations.some((equation) => equation.includes('R₍B₎ = P·a / L')) && state.substitutions.includes('R₍B₎ = 10 × 3 / 6 kN') && state.values.some((value) => value.includes('5 kN')));
   check('reaction separates equation, substitution and result steps', state.headings.includes('Take moments about A') && state.headings.includes('Substitute the given values') && state.headings.includes('Report the engine result'));
   await escape();
 
   await click('#result-cards .card:nth-child(4)');
   state = await wait();
-  check('point-load Mmax uses valid formula/substitution and 15 kNm engine answer', state.open && state.equations.some((equation) => equation.includes('Mmax = P·a·b / L')) && state.substitutions.includes('Mmax = 10 × 3 × 3 / 6 kNm') && state.values.some((value) => value.includes('15 kNm')));
+  check('point-load Mmax uses valid formula/substitution and 15 kN·m engine answer', state.open && state.equations.some((equation) => equation.includes('Mₘₐₓ = P·a·b / L')) && state.substitutions.includes('Mₘₐₓ = 10 × 3 × 3 / 6 kN·m') && state.values.some((value) => value.includes('15 kN·m')));
   await escape();
   await click('#result-cards .card:last-child');
   state = await wait();
-  check('centered point deflection uses its valid formula and substitution', state.equations.some((equation) => equation.includes('P·L³ / (48·E·I)')) && state.substitutions.includes('vmax = 10 × 6³ / (48 × 20000) m'));
+  check('centered point deflection uses its valid formula and substitution', state.equations.some((equation) => equation.includes('P·L³ / (48·E·I)')) && state.substitutions.includes('vₘₐₓ = 10 × 6³ / (48 × 20000) m'));
   await escape();
   await evaluate(`(() => { const input=document.getElementById('num-pos'); input.value='2'; input.dispatchEvent(new Event('input')); })()`);
   await click('#result-cards .card:last-child');
@@ -141,7 +153,7 @@ try {
   await evaluate(`document.querySelectorAll('#load-list .load-remove')[0].click()`);
   await click('#result-cards .card.accent');
   state = await wait();
-  check('full-span UDL Mmax uses valid substitution and 9 kNm engine answer', state.equations.some((equation) => equation.includes('w·L² / 8')) && state.substitutions.includes('Mmax = 2 × 6² / 8 kNm') && state.values.some((value) => value.includes('9 kNm')));
+  check('full-span UDL Mmax uses valid substitution and 9 kN·m engine answer', state.equations.some((equation) => equation.includes('w·L² / 8')) && state.substitutions.includes('Mₘₐₓ = 2 × 6² / 8 kN·m') && state.values.some((value) => value.includes('9 kN·m')));
   await escape();
   await click('#btn-add-point');
   state = JSON.parse(await snapshot());
@@ -181,7 +193,7 @@ try {
   check('rapid additions stop at the supported six-load cap', await evaluate(`(() => {const add=document.getElementById('btn-add-point');for(let i=0;i<8;i++)add.click();return document.querySelectorAll('#load-list .load-row').length===6&&add.disabled;})()`));
   await reload();
   state = JSON.parse(await snapshot());
-  check('reload restores default solved beam without stale modal', !state.open && !state.inertMain && state.cards.some((card) => card.value === '15 kNm'));
+  check('reload restores default solved beam without stale modal', !state.open && !state.inertMain && state.cards.some((card) => card.value === '15 kN·m'));
 
   // Eight SVG layout fixtures and desktop/phone dialog geometry, reusing same Edge/profile.
   const svgAudit = () => evaluate(`(() => {
@@ -228,7 +240,7 @@ try {
   await reload();
   await click('label[for="sel-support-left"] .term-chip');
   await sleep(200);
-  const desktop = await evaluate(`(() => {const r=document.querySelector('.teaching-dialog').getBoundingClientRect();return {inside:r.left>=0&&r.top>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1,cx:Math.abs((r.left+r.right)/2-innerWidth/2)<2,cy:Math.abs((r.top+r.bottom)/2-innerHeight/2)<2};})()`);
+  const desktop = await evaluate(`(() => {const r=document.querySelector('.teaching-dialog').getBoundingClientRect();return {inside:r.left>=0&&r.top>=0&&r.right<=document.documentElement.clientWidth+1&&r.bottom<=document.documentElement.clientHeight+1,cx:Math.abs((r.left+r.right)/2-document.documentElement.clientWidth/2)<2,cy:Math.abs((r.top+r.bottom)/2-document.documentElement.clientHeight/2)<2};})()`);
   check('dialog is centered and fits desktop viewport', desktop.inside && desktop.cx && desktop.cy);
   await evaluate(`document.querySelector('.teaching-close').click()`);
   await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 800, deviceScaleFactor: 1, mobile: false });

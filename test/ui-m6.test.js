@@ -100,7 +100,7 @@ test('multi-load beam: per-load labels with circled numbers, combined R/x̄ once
   const values = cardValues(doc);
   assert.ok(values.includes('12.7 kN'), 'RA = 38/3 ≈ 12.7 kN');
   assert.ok(values.includes('9.33 kN'), 'RB = 28/3 ≈ 9.33 kN');
-  assert.ok(values.includes('21.3 kNm'), 'Mmax = 64/3 ≈ 21.3 kNm');
+  assert.ok(values.includes('21.3 kN·m'), 'Mmax = 64/3 ≈ 21.3 kN·m');
   const labels = cardLabels(doc);
   assert.ok(!labels.some((l) => l.includes('Resultant') || l.includes('Centroid') || l.includes('intensity')));
 });
@@ -170,7 +170,7 @@ test('combined SFD labels the end shears; combined BMD labels the engine peak', 
   assert.ok(st.some((t) => t.includes('-9.33 kN')), 'V(L⁻) = −28/3 ≈ −9.33 kN labeled');
 
   const bmd = doc.getElementById('bmd-svg').findAll((n) => n.nodeName === 'text').map((n) => n.textContent);
-  assert.ok(bmd.some((t) => t.includes('Mmax = 21.3 kNm') && t.includes('at x = 2 m')), 'engine peak labeled');
+  assert.ok(bmd.some((t) => t.includes('Mₘₐₓ = 21.3 kN·m') && t.includes('at x = 2 m')), 'engine peak labeled');
 });
 
 test('multi-load x-axis stays uncluttered: 0, peak x*, L', () => {

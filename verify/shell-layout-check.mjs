@@ -1,5 +1,6 @@
 // M10 responsive/layout checks — isolated headless Edge session, port 9350.
 import { spawn } from 'node:child_process';
+import { cleanupLegacyBrowserSession } from './legacy-browser-session.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,14 +17,14 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ' — ' + detail : ''}`);
 };
 
-let server, edge, ws;
+let server, edge, ws, profileDir;
 try {
   const env = { ...process.env };
   delete env.PORT;
   server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env });
   await sleep(900);
   edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-sync',
-    `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(TMP, 'shell-layout-' + Date.now())}`,
+    `--remote-debugging-port=${PORT}`, `--user-data-dir=${profileDir = path.join(TMP, 'shell-layout-' + Date.now())}`,
     '--window-size=1440,1800', 'about:blank'], { stdio: 'ignore' });
   let wsUrl = null;
   for (let i = 0; i < 60 && !wsUrl; i++) {
@@ -133,9 +134,7 @@ try {
 } catch (error) {
   check('layout harness completes without setup error', false, String(error).slice(0, 300));
 } finally {
-  try { ws?.close(); } catch {}
-  try { edge?.kill(); } catch {}
-  try { server?.kill(); } catch {}
+  await cleanupLegacyBrowserSession({ edge, server, ws, profileDir, tempRoot: TMP, cdpPort: PORT });
 }
 
 const passed = results.filter((result) => result.ok).length;

@@ -3,8 +3,20 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { analyzeBeam } from '../src/analysis.js';
-import { getTerm } from '../src/glossary.js';
+import { GLOSSARY_KEYS, getTerm } from '../src/glossary.js';
+
+class FakeText {
+  constructor(text, doc) {
+    this.nodeName = '#text';
+    this.ownerDocument = doc;
+    this.parentNode = this.parentElement = null;
+    this.textContent = String(text);
+  }
+  contains(target) { return target === this; }
+  findAll(_predicate, found = []) { return found; }
+}
 
 class FakeNode {
   constructor(name, doc) {
@@ -17,12 +29,16 @@ class FakeNode {
     this.hidden = false;
     this.inert = false;
     this.disabled = false;
+    this.isConnected = true;
+    this.type = '';
+    this.value = '';
     this._text = '';
     this.parentNode = null;
     this.parentElement = null;
   }
   setAttribute(name, value) { this.attrs[name] = String(value); }
   getAttribute(name) { return this.attrs[name] ?? null; }
+  createTextNode(text) { return new FakeText(text, this); }
   append(...nodes) {
     for (const node of nodes) {
       node.parentNode = node.parentElement = this;
@@ -51,7 +67,10 @@ class FakeNode {
     return true;
   }
   click() { this.dispatchEvent({ type: 'click' }); }
-  contains(target) { return target === this || this.children.some((child) => child.contains(target)); }
+  contains(target) {
+    for (const child of this.children) if (child === target || child.contains?.(target)) return true;
+    return target === this;
+  }
   querySelectorAll(selector) {
     const matches = (node) => selector.split(',').some((part) => {
       const s = part.trim();
@@ -64,10 +83,7 @@ class FakeNode {
   }
   querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
   focus() { if (this.ownerDocument) this.ownerDocument.activeElement = this; }
-  set textContent(value) {
-    this.replaceChildren();
-    this._text = String(value);
-  }
+  set textContent(value) { this.replaceChildren(); this._text = String(value); }
   get textContent() { return this._text + this.children.map((child) => child.textContent).join(''); }
   get classList() {
     const node = this;
@@ -98,6 +114,7 @@ function makeFakeDoc() {
     addEventListener(type, listener) { (this.listeners[type] ??= []).push(listener); },
     createElement(name) { return new FakeNode(name, this); },
     createElementNS(_namespace, name) { return new FakeNode(name, this); },
+    createTextNode(text) { return new FakeText(text, this); },
     dispatch(type, event) {
       event.type = type;
       event.target ??= this;
@@ -132,14 +149,15 @@ function boot(input) {
 }
 
 const providers = { getGlossary: getTerm, getSteps: () => null };
-const findByClass = (root, name) => root.findAll((node) => node.classList.contains(name))[0] ?? null;
+const findByClass = (root, name) => root.findAll((node) => node.classList?.contains(name))[0] ?? null;
+const copyKeys = (root) => root.findAll((node) => node.getAttribute?.('data-topic-key')).map((node) => node.getAttribute('data-topic-key'));
 
 test('solved result cards retain labels and expose their own teaching routes', () => {
   const { doc, result } = boot({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 3 }], supports: pinRoller });
   const cards = doc.getElementById('result-cards').children;
   const labels = cards.map((card) => card.children.find((node) => node.className === 'card-label').textContent);
-  assert.deepEqual(labels, ['Reaction HA', 'Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection']);
-  assert.deepEqual(cards.map((card) => card.getAttribute('data-steps')), labels);
+  assert.deepEqual(labels, ['Reaction H₍A₎', 'Reaction V₍A₎', 'Reaction V₍B₎', 'Max bending moment', 'Max deflection']);
+  assert.deepEqual(cards.map((card) => card.getAttribute('data-steps')), ['Reaction HA', 'Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection']);
   assert.ok(cards.every((card) => card.getAttribute('tabindex') === '0' && card.getAttribute('role') === 'button'));
   assert.equal(result.reactions.left.Hx, 0);
 });
@@ -184,7 +202,6 @@ test('activation opens one modal topic, inerts the background, and restores stat
   assert.equal(dialog.getAttribute('aria-labelledby'), 'teaching-title');
   assert.equal(findByClass(dialog, 'teaching-title').textContent, getTerm('pin-support').term);
   assert.ok(findByClass(dialog, 'teaching-copy').textContent.includes('2 reaction unknowns'));
-  assert.equal(dialog.findAll((node) => /chip|breadcrumb|topic-link/i.test(node.className)).length, 0);
   assert.equal(doc.getElementById('lab-content').inert, true);
   assert.equal(doc._topbar.inert, true);
   assert.equal(trigger.inert, true);
@@ -195,7 +212,8 @@ test('activation opens one modal topic, inerts the background, and restores stat
   assert.equal(api.isOpen(), false);
   assert.equal(doc.activeElement, trigger);
   assert.equal(trigger.getAttribute('aria-expanded'), 'false');
-  assert.equal(doc.getElementById('lab-content').inert, false);  assert.equal(doc._topbar.inert, false);
+  assert.equal(doc.getElementById('lab-content').inert, false);
+  assert.equal(doc._topbar.inert, false);
 });
 
 test('backdrop closes the same reusable dialog and restores preexisting inert state', () => {
@@ -219,7 +237,7 @@ test('Enter opens a topic, Tab is trapped, and authored content is inserted as t
   const doc = makeFakeDoc();
   const api = initTeachingPopover(doc, providers);
   const trigger = new FakeNode('span', doc);
-  trigger.setAttribute('data-term', 'bending-moment');
+  trigger.setAttribute('data-term', 'equilibrium-check');
   doc.body.append(trigger);
   doc.dispatch('keydown', { key: 'Enter', target: trigger });
   assert.equal(api.isOpen(), true);
@@ -230,7 +248,93 @@ test('Enter opens a topic, Tab is trapped, and authored content is inserted as t
   const tab = { key: 'Tab', target: trigger, shiftKey: false, preventDefault() { this.defaultPrevented = true; } };
   doc.dispatch('keydown', tab);
   assert.equal(tab.defaultPrevented, true);
-  assert.equal(doc.activeElement, close);  assert.ok(dialog.findAll((node) => node.innerHTML !== undefined).length === 0);
+  assert.equal(doc.activeElement, close);
+});
+
+test('glossary references appear inline where mentioned, then navigate and preserve Back history', () => {
+  const doc = makeFakeDoc();
+  const api = initTeachingPopover(doc, providers);
+  const trigger = new FakeNode('button', doc);
+  trigger.setAttribute('data-term', 'supports');
+  doc.body.append(trigger);
+  trigger.click();
+  const dialog = findByClass(doc.body, 'teaching-dialog');
+  const copy = findByClass(dialog, 'teaching-copy');
+  const trail = findByClass(dialog, 'teaching-back');
+  const reaction = copy.children.find((node) => node.getAttribute?.('data-topic-key') === 'reaction');
+  const determinacy = copy.children.find((node) => node.getAttribute?.('data-topic-key') === 'determinacy');
+  assert.ok(reaction, 'reaction is linked in the sentence that mentions it');
+  assert.equal(reaction.textContent, 'reaction force or moment');
+  assert.ok(determinacy, 'determinacy is linked in the closing sentence that mentions it');
+  const related = [...dialog.findAll((node) => node.nodeName === 'nav' && node.className === 'teaching-related')][0];
+  assert.deepEqual(related.children.map((node) => node.getAttribute('data-topic-key')), ['pin-support', 'roller-support', 'fixed-support', 'free-end'],
+    'only concepts not already linked inline remain in the related-links tray');
+  assert.ok(copy.textContent.includes('Each support type resists a different set of motions'));
+  assert.ok(copy.textContent.includes('corresponds to one reaction force or moment.'));
+  const offset = copy.children.indexOf(reaction);
+  assert.ok(copy.children.slice(0, offset).some((node) => node.textContent.includes('corresponds to one ')));
+  assert.ok(copy.children.slice(offset + 1).some((node) => node.textContent.startsWith('. A pin')));
+  doc.dispatch('keydown', { key: 'Enter', target: reaction });
+  assert.equal(findByClass(dialog, 'teaching-title').textContent, 'Reaction');
+  assert.equal(api.isOpen(), true);
+  trail.click();
+  assert.equal(findByClass(dialog, 'teaching-title').textContent, 'Supports');
+  api.close();
+});
+
+test('every declared glossary relationship renders and navigates in the same dialog', () => {
+  for (const sourceKey of GLOSSARY_KEYS) {
+    const source = getTerm(sourceKey);
+    const expected = [...new Set([...source.subs, ...source.seeAlso])];
+    const doc = makeFakeDoc();
+    const api = initTeachingPopover(doc, providers);
+    const trigger = new FakeNode('button', doc);
+    trigger.setAttribute('data-term', sourceKey);
+    doc.body.append(trigger);
+    trigger.click();
+
+    const dialog = findByClass(doc.body, 'teaching-dialog');
+    const title = () => findByClass(dialog, 'teaching-title').textContent;
+    const related = () => findByClass(dialog, 'teaching-related');
+    const inlineKeys = [...copyKeys(findByClass(dialog, 'teaching-copy'))];
+    assert.ok(expected.every((key) => inlineKeys.includes(key) || related()?.children.some((link) => link.getAttribute('data-topic-key') === key)), sourceKey);
+    assert.ok(!related()?.children.some((link) => inlineKeys.includes(link.getAttribute('data-topic-key'))), `${sourceKey}: inline topics are not duplicated in related concepts`);
+    assert.equal(title(), source.term);
+    for (const targetKey of expected) {
+      const link = [...dialog.findAll((node) => node.nodeName === 'button' && node.getAttribute?.('data-topic-key') === targetKey)][0];
+      assert.equal(link.nodeName, 'button');
+      assert.equal(link.type, 'button');
+      assert.equal(link.getAttribute('aria-label'), `Open definition: ${getTerm(targetKey).term}`);
+      assert.ok(dialog.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])').includes(link));
+      link.click();
+      assert.equal(title(), getTerm(targetKey).term, `${sourceKey} → ${targetKey}`);
+      assert.equal(api.isOpen(), true);
+      findByClass(dialog, 'teaching-back').click();
+      assert.equal(title(), source.term, `Back: ${targetKey} → ${sourceKey}`);
+    }
+    api.close();
+    assert.equal(api.isOpen(), false);
+    assert.equal(doc.activeElement, trigger);
+    assert.equal(trigger.getAttribute('aria-expanded'), 'false');
+    assert.equal(doc.getElementById('lab-content').inert, false);
+  }
+});
+
+
+test('glossary prose remains text and is never interpreted as markup', () => {
+  const doc = makeFakeDoc();
+  const api = initTeachingPopover(doc, {
+    getGlossary: () => ({ term: 'Safe text', body: '<img src=x onerror=alert(1)>' }),
+    getSteps: () => null,
+  });
+  const trigger = new FakeNode('button', doc);
+  trigger.setAttribute('data-term', 'custom');
+  doc.body.append(trigger);
+  trigger.click();
+  const dialog = findByClass(doc.body, 'teaching-dialog');
+  assert.equal(findByClass(dialog, 'teaching-copy').textContent, '<img src=x onerror=alert(1)>');
+  assert.equal(dialog.findAll((node) => node.nodeName === 'img').length, 0);
+  assert.equal(api.isOpen(), true);
 });
 
 test('unknown topics fail softly and non-activation keys do not open the dialog', () => {

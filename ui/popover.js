@@ -1,7 +1,7 @@
 /**
- * popover.js — focused, one-topic teaching dialog (zero dependencies).
- * A learner opens one explanation at a time, only by activating a marked term
- * or result. There are no related-topic chips, breadcrumbs, or auto-advance.
+ * popover.js — accessible teaching dialog with in-context glossary links.
+ * Glossary links replace the current explanation in the same dialog; Back walks
+ * the learner's trail without opening nested windows.
  */
 
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -10,6 +10,7 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
   let dialog = null;
   let lastTrigger = null;
   let inertStates = [];
+  let glossaryTrail = [];
 
   function ensureDialog() {
     if (dialog) return dialog;
@@ -27,16 +28,24 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
 
     const header = doc.createElement('header');
     header.className = 'teaching-header';
+    const back = doc.createElement('button');
+    back.type = 'button';
+    back.className = 'teaching-back';
+    back.textContent = '← Back';
+    back.hidden = true;
+    back.setAttribute('aria-label', 'Back to previous definition');
     const title = doc.createElement('h2');
     title.className = 'teaching-title';
     title.id = 'teaching-title';
+    title.setAttribute('tabindex', '-1');
     const close = doc.createElement('button');
     close.type = 'button';
     close.className = 'teaching-close';
     close.textContent = 'Close';
     close.setAttribute('aria-label', 'Close explanation');
     close.addEventListener('click', closeDialog);
-    header.append(title, close);
+    back.addEventListener('click', goBack);
+    header.append(back, title, close);
 
     const body = doc.createElement('div');
     body.className = 'teaching-body';
@@ -47,13 +56,21 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
       if (event.target === dialog) closeDialog();
     });
     panel.addEventListener('click', (event) => event.stopPropagation());
-    dialog._els = { panel, title, body, close };
+    panel.addEventListener('click', (event) => {
+      const link = topicLinkOf(event.target, panel);
+      if (!link) return;
+      event.preventDefault();
+      event.stopPropagation();
+      renderTerm(link, link.getAttribute('data-topic-key'), { internal: true });
+    });
+    dialog._els = { panel, title, body, close, back };
     return dialog;
   }
 
   function closeDialog() {
     if (!dialog || dialog.hidden) return;
     dialog.hidden = true;
+    glossaryTrail = [];
     for (const [node, wasInert] of inertStates) node.inert = wasInert;
     inertStates = [];
     if (lastTrigger) {
@@ -63,17 +80,16 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
     lastTrigger = null;
   }
 
-  function openDialog(trigger, titleText, renderBody) {
+  function openDialog(trigger, titleText, renderBody, { internal = false } = {}) {
     const view = ensureDialog();
     const wasOpen = !view.hidden;
-    if (wasOpen) {
-      const oldTrigger = lastTrigger;
-      oldTrigger?.setAttribute?.('aria-expanded', 'false');
-      if (oldTrigger?.isConnected === false) oldTrigger.setAttribute?.('aria-expanded', 'false');
+    if (wasOpen && !internal) {
+      lastTrigger?.setAttribute?.('aria-expanded', 'false');
     }
-    lastTrigger = trigger;
-    const { title, body, close } = view._els;
+    if (!internal) lastTrigger = trigger;
+    const { title, body, close, back } = view._els;
     title.textContent = titleText;
+    back.hidden = glossaryTrail.length < 2;
     body.replaceChildren();
     renderBody(body);
     view.hidden = false;
@@ -85,19 +101,77 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
       inertStates = background.map((node) => [node, !!node.inert]);
       for (const [node] of inertStates) node.inert = true;
     }
-    trigger?.setAttribute?.('aria-expanded', 'true');
-    close.focus?.();
+    if (!internal) trigger?.setAttribute?.('aria-expanded', 'true');
+    if (internal) {
+      title.focus?.();
+      view._els.body.scrollTop = 0;
+    }
+    else close.focus?.();
   }
 
-  function renderTerm(trigger, key) {
+  function appendGlossaryBody(container, entry) {
+    const copy = doc.createElement('p');
+    copy.className = 'teaching-copy';
+    const inlineKeys = appendLinkedText(copy, entry.body);
+    container.append(copy);
+
+    const relatedKeys = [...new Set([...(entry.subs ?? []), ...(entry.seeAlso ?? [])])]
+      .filter((key) => !inlineKeys.has(key));
+    if (!relatedKeys.length) return;
+    const related = doc.createElement('nav');
+    related.className = 'teaching-related';
+    related.setAttribute('aria-label', `More concepts related to ${entry.term}`);
+    for (const key of relatedKeys) appendTopicLink(related, key);
+    container.append(related);
+  }
+
+  function appendTopicLink(container, key, label) {
+    const topic = getGlossary(key);
+    if (!topic) return false;
+    const link = doc.createElement('button');
+    link.type = 'button';
+    link.className = 'glossary-link';
+    link.setAttribute('data-topic-key', key);
+    link.setAttribute('aria-label', `Open definition: ${topic.term}`);
+    link.textContent = label ?? topic.term;
+    container.append(link);
+    return true;
+  }
+
+  function appendLinkedText(container, text) {
+    const pattern = /\[\[([a-z0-9-]+)(?:\|([^\]]+))?\]\]/g;
+    const linkedKeys = new Set();
+    let cursor = 0;
+    for (const match of text.matchAll(pattern)) {
+      if (match.index > cursor) container.append(doc.createTextNode(text.slice(cursor, match.index)));
+      const key = match[1];
+      if (appendTopicLink(container, key, match[2])) linkedKeys.add(key);
+      else container.append(doc.createTextNode(match[0]));
+      cursor = match.index + match[0].length;
+    }
+    if (cursor < text.length) container.append(doc.createTextNode(text.slice(cursor)));
+    return linkedKeys;
+  }
+
+  function renderTerm(trigger, key, { internal = false, back = false } = {}) {
     const entry = getGlossary(key);
     if (!entry) return;
-    openDialog(trigger, entry.term, (body) => {
-      const text = doc.createElement('p');
-      text.className = 'teaching-copy';
-      text.textContent = entry.body;
-      body.append(text);
-    });
+    if (!internal) glossaryTrail = [key];
+    else if (!back) glossaryTrail.push(key);
+    openDialog(trigger, entry.term, (body) => appendGlossaryBody(body, entry), { internal });
+  }
+
+  function goBack() {
+    if (glossaryTrail.length < 2) return;
+    glossaryTrail.pop();
+    renderTerm(lastTrigger, glossaryTrail.at(-1), { internal: true, back: true });
+  }
+
+  function topicLinkOf(target, panel) {
+    for (let node = target; node && node !== panel; node = node.parentElement ?? node.parentNode ?? null) {
+      if (node.getAttribute?.('data-topic-key')) return node;
+    }
+    return null;
   }
 
   function formatValue(value) {
@@ -110,6 +184,7 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
   function renderSteps(trigger, label) {
     const group = getSteps(label);
     if (!group) return;
+    glossaryTrail = [];
     openDialog(trigger, group.title, (body) => {
       const intro = doc.createElement('p');
       intro.className = 'teaching-copy teaching-intro';
@@ -176,7 +251,7 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
   function triggerOf(target) {
     let node = target;
     while (node && node !== doc.body && node !== doc.documentElement) {
-      if (node.getAttribute?.('data-term') || node.getAttribute?.('data-steps')) return node;
+      if (node.getAttribute?.('data-term') || node.getAttribute?.('data-topic-key') || node.getAttribute?.('data-steps')) return node;
       node = node.parentElement ?? node.parentNode ?? null;
     }
     return null;
@@ -184,8 +259,10 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
 
   function activate(trigger) {
     const term = trigger.getAttribute('data-term');
+    const topic = trigger.getAttribute('data-topic-key');
     const steps = trigger.getAttribute('data-steps');
     if (term) renderTerm(trigger, term);
+    else if (topic) renderTerm(trigger, topic, { internal: !!dialog && !dialog.hidden && dialog.contains?.(trigger) });
     else if (steps) renderSteps(trigger, steps);
   }
 

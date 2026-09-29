@@ -3,8 +3,8 @@
  * -------------------------------------------------------------
  * The glossary is hand-written teaching content; these tests enforce its
  * MECHANICS (never its wording): no dead links, no orphans, sane sizes,
- * and — the annotation rule — every data-term the UI references exists in
- * the dictionary, and the dictionary entry set is exactly what the UI uses.
+ * every declared relationship resolves to a dictionary entry and is rendered
+ * as the source for in-dialog navigation.
  * The ≤ 8 SVG touchpoint budget from plan-m9.md is asserted exactly.
  */
 import { test } from 'node:test';
@@ -16,18 +16,6 @@ import { GLOSSARY_KEYS, getTerm, hasTerm } from '../src/glossary.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (rel) => readFileSync(path.join(here, rel), 'utf8');
-
-test('every sub and seeAlso link points at an existing entry (no dead links)', () => {
-  for (const key of GLOSSARY_KEYS) {
-    const e = getTerm(key);
-    for (const sub of e.subs ?? []) {
-      assert.ok(hasTerm(sub), `${key}: sub "${sub}" does not exist in the dictionary`);
-    }
-    for (const also of e.seeAlso ?? []) {
-      assert.ok(hasTerm(also), `${key}: seeAlso "${also}" does not exist in the dictionary`);
-    }
-  }
-});
 
 test('every entry is reachable from some other entry (no orphans)', () => {
   const referenced = new Set();
@@ -67,9 +55,24 @@ test('every entry has a term and a body within sane teaching sizes', () => {
     assert.ok(e.body.length <= 1600, `${key}: body over the teaching cap (${e.body.length} chars) — split it`);
     assert.ok(Array.isArray(e.subs), `${key}: subs must be an array`);
     assert.ok(Array.isArray(e.seeAlso), `${key}: seeAlso must be an array`);
-    assert.ok((e.subs.length + e.seeAlso.length) <= 8, `${key}: too many chips (${e.subs.length + e.seeAlso.length})`);
+    assert.ok((e.subs.length + e.seeAlso.length) <= 8, `${key}: too many related entries (${e.subs.length + e.seeAlso.length})`);
+    for (const target of [...e.subs, ...e.seeAlso]) assert.ok(hasTerm(target), `${key}: unknown related topic "${target}"`);
+    for (const match of e.body.matchAll(/\[\[([a-z0-9-]+)(?:\|([^\]]+))?\]\]/g)) {
+      assert.ok(hasTerm(match[1]), `${key}: inline link target "${match[1]}" does not exist`);
+      if (match[2] != null) assert.ok(match[2].trim().length > 0, `${key}: inline link label is empty`);
+    }
   }
   assert.ok(GLOSSARY_KEYS.length >= 30, 'the dictionary should carry the full planned inventory (~39)');
+});
+
+test('engineering notation in glossary entries uses normalized visible symbols and units', () => {
+  const text = GLOSSARY_KEYS.map((key) => `${getTerm(key).term} ${getTerm(key).body}`).join(' ');
+  for (const legacy of ['ΣFx', 'ΣFy', 'ΣM_A', 'V_A', 'V_B', 'Vmax', 'Mmax', 'vmax', 'Vwall', 'Mwall', 'kNm', 'EI·']) {
+    assert.ok(!text.includes(legacy), `legacy notation remains: ${legacy}`);
+  }
+  for (const symbol of ['ΣFₓ', 'ΣFᵧ', 'V₍A₎', 'V₍B₎', 'Vₘₐₓ', 'Mₘₐₓ', 'E·I·v″', 'kN·m']) {
+    assert.ok(text.includes(symbol), `expected normalized notation: ${symbol}`);
+  }
 });
 
 test('the UI references only dictionary entries (annotation rule, forward direction)', () => {
@@ -101,11 +104,13 @@ test('content honesty markers: no AI, and the torsion note is correct', () => {
   const src = read('../src/glossary.js');
   assert.ok(src.includes("from THIS file") || src.includes('hand-written'), 'glossary should be documented as hand-written');
   const pin = getTerm('pin-support');
-  assert.ok(pin.body.includes('2 reaction unknowns'), 'pin teaches 2 reactions (not 3)');
+  const pinText = pin.body.replace(/\[\[([a-z0-9-]+)\|([^\]]+)\]\]/g, '$2');
+  assert.ok(pinText.includes('2 reaction unknowns'), 'pin teaches 2 reactions (not 3)');
   const fixed = getTerm('fixed-support');
   assert.ok(fixed.body.includes('3 reaction'), 'fixed teaches 3 reactions');
   const moment = getTerm('moment-reaction');
   assert.ok(moment.body.includes('torsion'), 'moment-reaction explains the torsion relationship');
   const roller = getTerm('roller-support');
-  assert.ok(roller.body.includes('1 reaction'), 'roller teaches 1 reaction');
+  const rollerText = roller.body.replace(/\[\[([a-z0-9-]+)\|([^\]]+)\]\]/g, '$2');
+  assert.ok(rollerText.includes('1 reaction'), 'roller teaches 1 reaction');
 });

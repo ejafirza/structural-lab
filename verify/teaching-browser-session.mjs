@@ -91,7 +91,11 @@ async function terminateOwnedEdgeTree(child) {
 
 async function waitForCdpShutdown(port) {
   if (!port) return false;
-  for (let i = 0; i < 100; i++) {
+  // During graceful shutdown probes keep SUCCEEDING while Edge is still listening, and
+  // fast successful fetches would exhaust a fixed iteration count in seconds. Wait on a
+  // time deadline instead; Edge's DevTools listener closing is the confirmation.
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 500);
     try {
@@ -103,9 +107,37 @@ async function waitForCdpShutdown(port) {
     } finally {
       clearTimeout(timeout);
     }
-    await sleep(100);
+    await sleep(250);
   }
   return false;
+}
+
+async function closeBrowserThroughEndpoint(port) {
+  // The harness can fail before it ever attached its own CDP WebSocket. If the DevTools
+  // browser endpoint is still serving, ask it to close the browser (best effort).
+  if (!port) return false;
+  try {
+    const version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+    if (!version?.webSocketDebuggerUrl) return false;
+    const ws = new WebSocket(version.webSocketDebuggerUrl);
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('browser endpoint open timeout')), 5000);
+      ws.addEventListener('open', () => { clearTimeout(timer); resolve(); }, { once: true });
+      ws.addEventListener('error', () => { clearTimeout(timer); reject(new Error('browser endpoint failed to open')); }, { once: true });
+    });
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 5000);
+      ws.addEventListener('message', (event) => {
+        if (JSON.parse(event.data).id === 1) { clearTimeout(timer); resolve(); }
+      });
+      ws.addEventListener('close', () => { clearTimeout(timer); resolve(); });
+      ws.send(JSON.stringify({ id: 1, method: 'Browser.close' }));
+    });
+    try { ws.close(); } catch {}
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function removeOwnedProfile(profilePath, tempRoot, remove = fs.rm) {
@@ -115,13 +147,13 @@ export async function removeOwnedProfile(profilePath, tempRoot, remove = fs.rm) 
     throw new Error('profile path failed the session ownership guard');
   }
 
-  for (let attempt = 0; attempt < 8; attempt++) {
+  for (let attempt = 0; attempt < 12; attempt++) {
     try {
       await remove(ownedPath, { recursive: true, force: false });
       return true;
     } catch (error) {
       if (error.code === 'ENOENT') return true;
-      if (error.code !== 'EBUSY' || attempt === 7) throw error;
+      if (error.code !== 'EBUSY' || attempt === 11) throw error;
       await sleep(250 * (attempt + 1));
     }
   }
@@ -162,10 +194,13 @@ export function createTeachingBrowserSession({ root, tmp, edgePath }) {
     edge.on('error', (error) => { edgeSpawnError = error; });
 
     let wsUrl = null;
+    let wrapperExitAt = null;
     for (let i = 0; i < 75 && !wsUrl; i++) {
       if (edgeSpawnError) throw edgeSpawnError;
-      // On Windows the executable wrapper can exit after the browser child writes
-      // DevToolsActivePort. Always try discovery before treating that wrapper exit as fatal.
+      // On Windows the executable wrapper can exit while the attached browser is still
+      // starting: the browser children outlive the wrapper and finish bringing the CDP
+      // endpoint up on their own. Always try discovery before treating a wrapper exit as
+      // fatal, and keep polling through a bounded grace window after one is observed.
       try {
         const activePort = (await fs.readFile(path.join(profileDir, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
         cdpPort = Number(activePort);
@@ -174,8 +209,14 @@ export function createTeachingBrowserSession({ root, tmp, edgePath }) {
           wsUrl = targets.find((target) => target.type === 'page' && !/^(edge|chrome):\/\//.test(String(target.url || '')))?.webSocketDebuggerUrl;
         }
       } catch {}
-      if (!wsUrl && (edge.exitCode !== null || edge.signalCode !== null)) throw new Error('Edge exited before CDP became available');
-      if (!wsUrl) await sleep(200);
+      if (!wsUrl) {
+        const wrapperExited = edge.exitCode !== null || edge.signalCode !== null;
+        if (wrapperExited) {
+          wrapperExitAt ??= i;
+          if (i - wrapperExitAt >= 25) throw new Error('Edge exited before CDP became available');
+        }
+        await sleep(200);
+      }
     }
     if (!wsUrl) throw new Error('Edge remote debugging did not start');
 
@@ -238,22 +279,29 @@ export function createTeachingBrowserSession({ root, tmp, edgePath }) {
       let shutdownConfirmed;
       if (edge && edgeSpawned) {
         // The spawned executable may be only a wrapper; the attached browser can outlive it.
-        // Close through CDP whenever connected, then separately confirm process and port exit.
+        // Close through CDP whenever connected, then separately confirm the endpoint is down.
+        // Do not await the reply: Edge tears the connection down instead of answering.
         if (send && ws?.readyState === WebSocket.OPEN) {
-          try { await send('Browser.close'); } catch {}
+          try { send('Browser.close').catch(() => {}); } catch {}
         }
-        let processExited = await waitForChildExit(edge, 10000);
-        if (!processExited) {
-          const terminationRequested = await terminateOwnedEdgeTree(edge);
-          processExited = terminationRequested && await waitForChildExit(edge, 10000);
+        const wrapperExited = await waitForChildExit(edge, 10000);
+        if (!wrapperExited) {
+          await terminateOwnedEdgeTree(edge);
+          await waitForChildExit(edge, 10000);
         }
-        if (processExited && !cdpPort && profileDir) {
+        if (!cdpPort && profileDir) {
           try {
             const activePort = (await fs.readFile(path.join(profileDir, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
             cdpPort = Number(activePort);
           } catch {}
         }
-        shutdownConfirmed = processExited && await waitForCdpShutdown(cdpPort);
+        let endpointDown = await waitForCdpShutdown(cdpPort);
+        if (!endpointDown) {
+          // A wrapper exit alone does not prove the attached browser died. When the DevTools
+          // endpoint is still serving, close the browser through it and re-confirm shutdown.
+          if (await closeBrowserThroughEndpoint(cdpPort)) endpointDown = await waitForCdpShutdown(cdpPort);
+        }
+        shutdownConfirmed = endpointDown;
       } else {
         // A failed spawn never owned an Edge process; if spawn succeeded and exited before
         // the CDP port was read, shutdown is unverified and its profile must be retained.

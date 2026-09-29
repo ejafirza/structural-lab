@@ -25,7 +25,7 @@
  */
 import { analyzeBeam, DEFAULT_EI } from '../src/analysis.js';
 import { MAX_LOADS, MAX_PROFILE_POINTS, emitDescriptor } from '../src/loadmodel.js';
-import { SUPPORTS } from '../src/supportmodel.js';
+import { SUPPORTS, SUPPORT_TYPES } from '../src/supportmodel.js';
 import { getTerm } from '../src/glossary.js';
 import { groupForCard } from '../src/explain.js';
 import { renderM3, BAND_Y_BASE, BAND_MAX_H } from './renderm3.js';
@@ -293,6 +293,10 @@ function updateAddButtons() {
   $('btn-add-distributed').disabled = full;
   $('btn-add-point').title = full ? `At most ${MAX_LOADS} loads` : 'Add a point load';
   $('btn-add-distributed').title = full ? `At most ${MAX_LOADS} loads` : 'Add a distributed load';
+  for (const id of ['beam-context-point', 'beam-context-distributed']) {
+    const button = $(id);
+    if (button) button.disabled = full;
+  }
 }
 
 function updateLoadCount() {
@@ -358,12 +362,12 @@ function selectLoad(i) {
   rows[i]?.focus();
 }
 
-function addLoad(type) {
+function addLoad(type, pointPosition = null) {
   if (state.loads.length >= MAX_LOADS) return;
   const span = state.span;
   const third = span / 3;
   const load = type === 'point'
-    ? { type: 'point', magnitude: 5, position: clamp(2 * third, EDGE_EPS, span - EDGE_EPS) }
+    ? { type: 'point', magnitude: 5, position: clamp(pointPosition ?? 2 * third, EDGE_EPS, span - EDGE_EPS) }
     : { type: 'profile', points: [{ x: third / 2, w: 2 }, { x: 2 * third, w: 2 }] };
   state.loads.push(load);
   state.selectedLoad = state.loads.length - 1;
@@ -563,36 +567,61 @@ function populateSupportSelects() {
       })
     );
     sel.value = state.supports[side];
-    sel.addEventListener('change', (evt) => {
-      state.supports[side] = evt.target.value;
-      solveAndRender();
-    });
+    sel.addEventListener('change', (evt) => setSupport(side, evt.target.value));
   }
+}
+
+function setSupport(side, type, restoreFocus = false) {
+  state.supports[side] = type;
+  $(`sel-support-${side}`).value = type;
+  solveAndRender();
+  if (restoreFocus) {
+    const control = [...$('beam-svg').querySelectorAll('[data-role="support-toggle"]')]
+      .find((node) => node.getAttribute('data-support-side') === side);
+    control?.focus();
+  }
+}
+
+function cycleSupport(side, restoreFocus = false) {
+  const index = SUPPORT_TYPES.indexOf(state.supports[side]);
+  setSupport(side, SUPPORT_TYPES[(index + 1) % SUPPORT_TYPES.length], restoreFocus);
 }
 
 // --- numeric inputs + sliders (bound to the SELECTED load) -------------------
 
-function bindNumberSlider(numId, sliderId, apply, { min, max, step = 0.1, sanitize, onChange }) {
+function bindNumberSlider(numId, sliderId, apply, { min, max, step = 0.1, sanitize, onChange, getValue }) {
   const num = $(numId);
   const slider = $(sliderId);
   slider.min = min;
   slider.max = max;
   slider.step = step;
 
-  const commit = (raw) => {
+  const commit = (raw, source) => {
+    if (raw == null || String(raw).trim() === '') return;
     const v = Number(raw);
     if (!Number.isFinite(v)) return;
-    apply(sanitize ? sanitize(v) : v);
+    const value = apply(sanitize ? sanitize(v) : v);
+    slider.value = String(value);
+    if (source === 'slider' || value !== v) num.value = fmt(value);
     onChange?.();
     solveAndRender();
   };
 
-  num.addEventListener('input', () => commit(num.value));
+  num.addEventListener('input', () => commit(num.value, 'number'));
   num.addEventListener('blur', () => {
-    const v = Number(num.value);
-    if (!Number.isFinite(v)) num.value = fmt(apply(null));
+    const raw = num.value.trim();
+    const v = Number(raw);
+    if (raw === '' || !Number.isFinite(v)) {
+      const value = getValue ? getValue() : apply(null);
+      num.value = fmt(value);
+      slider.value = String(value);
+      return;
+    }
+    const value = sanitize ? sanitize(v) : v;
+    num.value = fmt(value);
+    slider.value = String(value);
   });
-  slider.addEventListener('input', () => commit(slider.value));
+  slider.addEventListener('input', () => commit(slider.value, 'slider'));
 }
 
 const getSel = () => selected();
@@ -607,11 +636,17 @@ function isSelectedDeterminate() {
   return lastDeterminate;
 }
 
+function syncSpanControls() {
+  $('num-span').value = fmt(state.span);
+  $('slider-span').value = String(state.span);
+}
+
 bindNumberSlider('num-span', 'slider-span',
   (v) => { state.span = clamp(v, 1, 20); return state.span; },
   {
     min: 1, max: 20, step: 0.1,
-    sanitize: (v) => clamp(v, 1, 20),
+    sanitize: (v) => clamp(Number((Math.round(v * 10) / 10).toFixed(1)), 1, 20),
+    getValue: () => state.span,
     onChange: () => {
       state.loads.forEach((s) => {
         if (s.type === 'point') s.position = clamp(s.position, EDGE_EPS, state.span - EDGE_EPS);
@@ -741,26 +776,77 @@ function makeBeamDraggable(svg) {
   let dragging = null; // 'load' | 'region-start' | 'region-end' | 'profile-point'
   let draggedPoint = null; // the pinned point OBJECT (identity survives re-sorting)
 
-  const beamX = (evt) => {
+  const beamLocal = (evt) => {
     const pt = svg.createSVGPoint();
     pt.x = evt.clientX;
     pt.y = evt.clientY;
-    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
-    return makeXMap(state).toBeam(loc.x);
+    const ctm = svg.getScreenCTM();
+    return pt.matrixTransform(ctm.inverse());
   };
+  const beamX = (evt) => makeXMap(state).toBeam(beamLocal(evt).x);
 
-  // Inverse of the renderer's band scaling (renderm3.js exports the two
-  // constants — the single home of the conversion in both directions).
   const beamW = (evt, maxW) => {
-    const pt = svg.createSVGPoint();
-    pt.x = evt.clientX;
-    pt.y = evt.clientY;
-    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const loc = beamLocal(evt);
     const w = ((BAND_Y_BASE - loc.y) / BAND_MAX_H) * maxW;
     return clamp(w, 0, W_MAX);
   };
 
   const profileMaxW = () => Math.max(...selected().points.map((p) => p.w), 1e-9);
+  const menu = $('beam-context-menu');
+  const menuPoint = $('beam-context-point');
+  const menuDistributed = $('beam-context-distributed');
+  let contextPosition = null;
+
+  if (menu && menuPoint && menuDistributed) {
+    const closeMenu = (restoreFocus = false) => {
+      menu.hidden = true;
+      contextPosition = null;
+      if (restoreFocus) svg.focus();
+    };
+    const isMenuTarget = (target) => menu.contains(target);
+    const dismissOutside = (evt) => {
+      if (!menu.hidden && !isMenuTarget(evt.target)) closeMenu();
+    };
+
+    svg.addEventListener('contextmenu', (evt) => {
+      const desktop = typeof window.matchMedia === 'function'
+      ? window.matchMedia('(min-width: 981px) and (hover: hover)').matches
+      : window.innerWidth > 980;
+    if (!desktop) return;
+      evt.preventDefault();
+      contextPosition = clamp(beamX(evt), EDGE_EPS, state.span - EDGE_EPS);
+      $('beam-context-title').textContent = `Add a load at x = ${fmt(contextPosition)} m`;
+      menu.hidden = false;
+      const rect = menu.getBoundingClientRect();
+      const width = rect.width || 206;
+      const height = rect.height || 116;
+      const maxLeft = Math.max(8, window.innerWidth - width - 8);
+      const maxTop = Math.max(8, window.innerHeight - height - 8);
+      menu.style.left = `${clamp(evt.clientX, 8, maxLeft)}px`;
+      menu.style.top = `${clamp(evt.clientY, 8, maxTop)}px`;
+      menuPoint.focus();
+    });
+    const addFromContext = (type, position) => {
+      $('model-panel').open = true;
+      addLoad(type, position);
+    };
+    menuPoint.addEventListener('click', () => {
+      const position = contextPosition;
+      closeMenu();
+      if (position != null) addFromContext('point', position);
+    });
+    menuDistributed.addEventListener('click', () => {
+      closeMenu();
+      addFromContext('distributed');
+    });
+    document.addEventListener('click', dismissOutside);
+    document.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Escape' && !menu.hidden) {
+        evt.preventDefault();
+        closeMenu(true);
+      }
+    });
+  }
 
   svg.addEventListener('pointerdown', (evt) => {
     const t = evt.target.closest?.('[data-role]');
@@ -793,11 +879,23 @@ function makeBeamDraggable(svg) {
   });
 
   svg.addEventListener('click', (evt) => {
+    const support = evt.target.closest?.('[data-role="support-toggle"]');
+    if (support) {
+      cycleSupport(support.getAttribute('data-support-side'));
+      return;
+    }
     // Clicking any load on the beam selects it (drag already handled above).
     const group = evt.target.closest?.('[data-load-index]');
     if (!group) return;
     const idx = Number(group.getAttribute('data-load-index'));
     if (idx !== state.selectedLoad) selectLoad(idx);
+  });
+
+  svg.addEventListener('keydown', (evt) => {
+    const support = evt.target.closest?.('[data-role="support-toggle"]');
+    if (!support || (evt.key !== 'Enter' && evt.key !== ' ')) return;
+    evt.preventDefault();
+    cycleSupport(support.getAttribute('data-support-side'), true);
   });
 
   window.addEventListener('pointermove', (evt) => {
@@ -929,6 +1027,7 @@ populateSupportSelects();
 bindLoadListButtons();
 bindPointsEditor();
 bindEI();
+syncSpanControls();
 initTheme(document);
 initTeaching();
 syncSelectedControls();

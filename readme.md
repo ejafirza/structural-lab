@@ -88,28 +88,30 @@ civil/structural engineering students, built around the loop
 - **Milestone 10 — complete**: responsive app shell, foldable Model editor, System/Light/
   Dark preference, and the equilibrium check beside Results. The M10 checkpoint was
   committed and pushed separately; it changed no calculations.
-- **Milestone 11 — implementation in progress**: minimalist hierarchy and spacing,
+- **Milestone 11 — complete**: minimalist hierarchy and spacing,
   concise copy, optional preset disclosures, and a centered accessible one-topic teaching
-  dialog are implemented. The dialog opens only on activation, inerts the whole page
-  background, traps focus and restores focus/state on close. E·I stays visible for every
-  determinate load kind; final verification remains pending.
-- **Teaching layer (M9, redesigned in M11):** activate a marked term or info button to
-  read its hand-written explanation; activate a result card for a worked explanation.
-  There are no nested topic chips or breadcrumbs. Standard cases show valid equations
-  and substitutions. Mixed/profile cases show actual inputs and method, with engine
-  outputs kept distinct from the method—no fabricated intermediate values. Unsolved
-  beams explain why without inventing results.
+  dialog with in-context glossary links and a Back trail. The dialog opens only on
+  activation, inerts the whole page background, traps focus and restores focus/state on
+  close. E·I stays visible for every determinate load kind. Full browser verification
+  (2026-09-29) is recorded in `plan-m11.md` §7.
+- **Teaching layer (M9, refined after M11):** activate a marked term or info button to
+  read its hand-written explanation; blue inline links open related definitions in the
+  same dialog, with Back through the exploration trail. Result cards still open worked
+  explanations. Standard cases show valid equations and substitutions. Mixed/profile
+  cases show actual inputs and method, with engine outputs kept distinct from the
+  method—no fabricated intermediate values. Unsolved beams explain why without inventing
+  results.
 - New teaching modules remain `src/glossary.js` (dictionary), `src/explain.js` (formatter
   over completed results) and `ui/popover.js` (reusable accessible dialog).
 - Roadmap after M11: future AI tutor layer; the current lab remains useful on its own.
 
 ## Application shell (M10)
 
-- The lab keeps its academic purpose: change a model, see the beam diagrams update,
-  and open clear explanations when a term or result is unfamiliar.
-- On wide screens the **Model** editor sits beside **Results** and the four diagrams;
-  on smaller screens these stack in a natural reading order. There is no horizontal
-  page scrolling at the tested phone widths.
+- The **beam is the first, full-width workspace**: drag a load and watch the beam and
+  diagrams respond. Results follow it, then the folded Model editor for deeper edits.
+- On smaller screens these areas stack in the same beam → results → model order. The
+  Model disclosure keeps advanced controls available without competing with the first
+  experiment.
 - The Model editor can be folded and reopened without resetting any inputs. Its heading
   shows the current load count. The equilibrium self-check now sits with Results.
 - The appearance button cycles **System → Light → Dark** and remembers only this visual
@@ -135,10 +137,12 @@ npm run demo   # ASCII text demo of the engine (Milestone 1)
 **Testing & quality:** Node's built-in test suite (`npm test`) covers analytical cases
 with independently known textbook values, rendering, accessible teaching, shell/theme
 checks, and source guards proving the UI contains no engineering formulas. The browser suite in [`verify/`](verify/readme.md) covers controls, calculations, dialogs,
-themes and responsive layouts. One M11 run passed all 46 product checks with no console
-errors; profile cleanup then failed once with `EBUSY`. Bounded retries were added but
-not browser-rerun. M5–M10 browser regressions remain pending; `verify/tmp/` is currently
-empty. CI runs the unit suite on Node 20 and 22 against a case-sensitive filesystem.
+themes and responsive layouts. The complete M5–M11 browser regression matrix passed serially on 2026-09-29: all
+functional and layout assertions passed — M11 teaching 47/47, M10 shell 22/22, M5 consolidation
+32/32, M6 multi-load 22/22, M7 profile 30/30, M8 deflection 15/15, and all five layout audits
+clean (27 shell checks, 6/6, 6/6, 8/8, 8/8) — with no browser console/runtime errors and
+`verify/tmp/` empty after the run. The unit suite stood at 188/188 in the same state.
+CI runs the unit suite on Node 20 and 22 against a case-sensitive filesystem.
 Educational tool — **not** a professional design-verification system.
 
 ## License

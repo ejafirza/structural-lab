@@ -2,6 +2,7 @@
 // Verifies: concept toggle, preset chips (single distributed editor), contextual
 // resultant/centroid on the beam, clean Results panel, and no console errors.
 import { spawn } from 'node:child_process';
+import { cleanupLegacyBrowserSession } from './legacy-browser-session.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,7 +19,7 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 };
 
-let server, edge;
+let server, edge, profileDir;
 try {
     // Sanitize the inherited environment: a PORT exported by an outer tool
   // (e.g. a dev-server host setting PORT=0) must not rebind our app server
@@ -28,7 +29,7 @@ try {
   server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env: childEnv });
   await sleep(900);
   edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-sync',
-    `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(TMP, 'consol-edge-' + Date.now())}`,
+    `--remote-debugging-port=${PORT}`, `--user-data-dir=${profileDir = path.join(TMP, 'consol-edge-' + Date.now())}`,
     '--window-size=1200,1500', 'about:blank'], { stdio: 'ignore' });
 
   let wsUrl = null;
@@ -103,7 +104,7 @@ try {
   // 1. default point load (regression)
   let s = JSON.parse(await snapshot());
   check('point default: VA=VB=5 kN', s.cards.filter((v) => v === '5 kN').length === 2, s.cards.join('|'));
-  check('point default: Mmax 15 kNm', s.cards.includes('15 kNm'));
+  check('point default: Mmax 15 kNm', s.cards.includes('15 kN·m'));
   check('point default: draggable handle, no region handles', s.pointHandle === 1 && s.regionStart === 0);
   check('point default: no load-description cards', !s.labels.some((l) => l.includes('Resultant') || l.includes('Centroid') || l.includes('intensity')), s.labels.join('|'));
   check('point default: point controls visible, distributed hidden', s.ctlLoadHidden === false && s.ctlW1Hidden === true);
@@ -120,7 +121,7 @@ try {
   await sleep(400);
   s = JSON.parse(await snapshot());
   check('Full UDL: chip active', s.activePreset === 'full', String(s.activePreset));
-  check('Full UDL: VA=VB=6 kN, Mmax 9 kNm', s.cards.filter((v) => v === '6 kN').length === 2 && s.cards.includes('9 kNm'), s.cards.join('|'));
+  check('Full UDL: VA=VB=6 kN, Mmax 9 kNm', s.cards.filter((v) => v === '6 kN').length === 2 && s.cards.includes('9 kN·m'), s.cards.join('|'));
   check('Full UDL: R=12 kN on beam', s.beamTexts.some((t) => t.includes('R = 12 kN')), s.beamTexts.join('|'));
   check('Full UDL: x̄=3 m on beam', s.beamTexts.some((t) => t.includes('x̄ = 3 m')));
   check('Full UDL: w=2 kN/m on beam', s.beamTexts.some((t) => t.includes('w = 2 kN/m')));
@@ -133,7 +134,7 @@ try {
   await sleep(400);
   s = JSON.parse(await snapshot());
   check('Partial UDL: chip active', s.activePreset === 'partial', String(s.activePreset));
-  check('Partial UDL: VA=VB=4 kN, Mmax 8 kNm', s.cards.filter((v) => v === '4 kN').length === 2 && s.cards.includes('8 kNm'), s.cards.join('|'));
+  check('Partial UDL: VA=VB=4 kN, Mmax 8 kNm', s.cards.filter((v) => v === '4 kN').length === 2 && s.cards.includes('8 kN·m'), s.cards.join('|'));
   check('Partial UDL: R=8 kN, x̄=3 m', s.beamTexts.some((t) => t.includes('R = 8 kN')) && s.beamTexts.some((t) => t.includes('x̄ = 3 m')));
 
   // 4. Triangular (peak left)
@@ -141,7 +142,7 @@ try {
   await sleep(400);
   s = JSON.parse(await snapshot());
   check('Triangular ▲: chip active', s.activePreset === 'tri-left', String(s.activePreset));
-  check('Triangular ▲: RA=12, RB=6, Mmax 13.9', s.cards.includes('12 kN') && s.cards.includes('6 kN') && s.cards.includes('13.9 kNm'), s.cards.join('|'));
+  check('Triangular ▲: RA=12, RB=6, Mmax 13.9', s.cards.includes('12 kN') && s.cards.includes('6 kN') && s.cards.includes('13.9 kN·m'), s.cards.join('|'));
   check('Triangular ▲: R=18 kN, x̄=2 m', s.beamTexts.some((t) => t.includes('R = 18 kN')) && s.beamTexts.some((t) => t.includes('x̄ = 2 m')));
   check('Triangular ▲: intensity 6 → 0', s.beamTexts.some((t) => t.includes('w: 6 → 0 kN/m')));
   check('Triangular ▲: polygon drawn', s.bandPoly >= 1, `poly=${s.bandPoly}`);
@@ -150,7 +151,7 @@ try {
   await clickPreset('trap');
   await sleep(400);
   s = JSON.parse(await snapshot());
-  check('Trapezoidal: RA=8, RB=10, Mmax 13.5', s.cards.includes('8 kN') && s.cards.includes('10 kN') && s.cards.includes('13.5 kNm'), s.cards.join('|'));
+  check('Trapezoidal: RA=8, RB=10, Mmax 13.5', s.cards.includes('8 kN') && s.cards.includes('10 kN') && s.cards.includes('13.5 kN·m'), s.cards.join('|'));
   check('Trapezoidal: R=18 kN, x̄=3.33 m', s.beamTexts.some((t) => t.includes('R = 18 kN')) && s.beamTexts.some((t) => t.includes('x̄ = 3.33 m')));
   check('Trapezoidal: intensity 2 → 4', s.beamTexts.some((t) => t.includes('w: 2 → 4 kN/m')));
 
@@ -177,9 +178,7 @@ try {
   console.error('HARNESS ERROR:', err);
   results.push({ name: 'harness', ok: false });
 } finally {
-  try { edge?.kill(); } catch {}
-  try { server?.kill(); } catch {}
-  await sleep(300);
+  await cleanupLegacyBrowserSession({ edge, server, profileDir, tempRoot: TMP, cdpPort: PORT });
 }
 
 const failed = results.filter((r) => !r.ok);

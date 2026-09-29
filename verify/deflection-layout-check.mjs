@@ -4,6 +4,7 @@
 // mixed loads, long span, tiny E·I (huge sag), and indeterminate.
 // Same getBBox audit technique as the M5/M6/M7 layout checks (hard DoD gate).
 import { spawn } from 'node:child_process';
+import { cleanupLegacyBrowserSession } from './legacy-browser-session.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,14 +15,14 @@ const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const PORT = 9346;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-let server, edge;
+let server, edge, profileDir;
 try {
   const childEnv = { ...process.env };
   delete childEnv.PORT;
   server = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env: childEnv });
   await sleep(900);
   edge = spawn(EDGE, ['--headless=new', '--disable-gpu', '--no-first-run', '--disable-sync',
-    `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(TMP, 'defl-lay-' + Date.now())}`,
+    `--remote-debugging-port=${PORT}`, `--user-data-dir=${profileDir = path.join(TMP, 'defl-lay-' + Date.now())}`,
     '--window-size=1200,1800', 'about:blank'], { stdio: 'ignore' });
 
   let wsUrl = null;
@@ -138,7 +139,5 @@ try {
   console.error('HARNESS ERROR:', err);
   process.exitCode = 1;
 } finally {
-  try { edge?.kill(); } catch {}
-  try { server?.kill(); } catch {}
-  await sleep(300);
+  await cleanupLegacyBrowserSession({ edge, server, profileDir, tempRoot: TMP, cdpPort: PORT });
 }
