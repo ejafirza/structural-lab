@@ -191,9 +191,14 @@ src/explain.js       M9 derivation formatter over finished results (reads, never
 src/demo.js          ASCII demo of the engine (M1)
 ui/index.html        responsive shell (M10), minimalist hierarchy/copy (M11), model
                      controls (load list M6, shape-point table M7, E·I M8), teaching triggers (M9/M11)
-ui/app.js            state + input wiring + engine adapter (ONLY importer of the engine;
-                     M7: point-list internal model and handles; M10: theme/load count;
-                     M11: beam-level stiffness visibility + one-group card routing)
+ui/app.js            interaction orchestration + engine adapter (ONLY caller of
+                     analyzeBeam): solve→render loop, load list, flat distributed
+                     editor, shape-point table, E·I, presets, supports, sliders, boot
+ui/state.js          the single UI state object + pure state logic (accessors,
+                     invariant repairs, last-solved result store) — DOM-free
+ui/drag.js           beam pointer/keyboard drag wiring + desktop context menu
+                     (guarded by test/interaction-guard.test.js; actions injected by app.js)
+ui/teaching.js       M9 teaching-layer bootstrap (reads the last result from state.js)
 ui/theme.js          M10 System / Light / Dark preference (presentation only)
 ui/popover.js        M11 centered one-topic dialog (a11y, inert background, focus lifecycle)
 ui/render.js         M2 reference renderers (simply supported point load) — FROZEN
@@ -245,7 +250,9 @@ input event → state {span, loads: [descriptor, …], selectedLoad, supports}
   — intensity, resultant `R`, centroid `x̄` — lives on the beam diagram.
 ```
 
-- `ui/app.js` is the **only** module that imports the engine.
+- `ui/app.js` is the **only** module that calls `analyzeBeam` (its engine input
+  builder lives in `ui/state.js`; the teaching layer reads the finished result
+  from there and never re-solves).
 - The renderers receive the engine `result` and map it to SVG geometry; they
   contain **no engineering mathematics** (enforced by static source-guard tests).
 - `analyzeBeam` accepts a general `loads` array (1..6 loads) or the

@@ -6,8 +6,8 @@
  * `'load'` — the load arrow started a drag that did nothing, and NO presence
  * check could see it (handle-existence tests stayed green for two milestones).
  *
- * This guard parses ui/app.js and enforces that the three drag handlers share
- * one consistent vocabulary:
+ * This guard parses ui/drag.js (the beam-drag wiring extracted from app.js)
+ * and enforces that the three drag handlers share one consistent vocabulary:
  *   1. pointerdown's accepted data-roles are exactly the documented set;
  *   2. the keyboard handler branches on the SAME attribute roles;
  *   3. every accepted role reaches a pointermove branch, through the single
@@ -25,14 +25,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const src = readFileSync(fileURLToPath(new URL('../ui/app.js', import.meta.url)), 'utf8');
+const src = readFileSync(fileURLToPath(new URL('../ui/drag.js', import.meta.url)), 'utf8');
 
 /** Slice the source between two anchor markers (handler bodies are short). */
 function segment(fromMarker, toMarker) {
   const from = src.indexOf(fromMarker);
-  assert.notEqual(from, -1, `app.js is missing the ${fromMarker} handler — drag wiring changed shape; update this guard`);
+  assert.notEqual(from, -1, `drag.js is missing the ${fromMarker} handler — drag wiring changed shape; update this guard`);
   const to = toMarker ? src.indexOf(toMarker, from) : src.length;
-  assert.notEqual(to, -1, `app.js is missing the ${toMarker} anchor — drag wiring changed shape; update this guard`);
+  assert.notEqual(to, -1, `drag.js is missing the ${toMarker} anchor — drag wiring changed shape; update this guard`);
   return src.slice(from, to);
 }
 

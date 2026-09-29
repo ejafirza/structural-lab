@@ -6,134 +6,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { analyzeBeam } from '../src/analysis.js';
 import { GLOSSARY_KEYS, getTerm } from '../src/glossary.js';
+import { FakeNode, makeDoc } from './helpers/fake-dom.js';
 
-class FakeText {
-  constructor(text, doc) {
-    this.nodeName = '#text';
-    this.ownerDocument = doc;
-    this.parentNode = this.parentElement = null;
-    this.textContent = String(text);
-  }
-  contains(target) { return target === this; }
-  findAll(_predicate, found = []) { return found; }
-}
-
-class FakeNode {
-  constructor(name, doc) {
-    this.nodeName = name;
-    this.ownerDocument = doc;
-    this.children = [];
-    this.attrs = {};
-    this.listeners = {};
-    this.className = '';
-    this.hidden = false;
-    this.inert = false;
-    this.disabled = false;
-    this.isConnected = true;
-    this.type = '';
-    this.value = '';
-    this._text = '';
-    this.parentNode = null;
-    this.parentElement = null;
-  }
-  setAttribute(name, value) { this.attrs[name] = String(value); }
-  getAttribute(name) { return this.attrs[name] ?? null; }
-  createTextNode(text) { return new FakeText(text, this); }
-  append(...nodes) {
-    for (const node of nodes) {
-      node.parentNode = node.parentElement = this;
-      node.ownerDocument = this.ownerDocument;
-      this.children.push(node);
-    }
-  }
-  replaceChildren(...nodes) {
-    for (const node of this.children) node.parentNode = node.parentElement = null;
-    this.children = [];
-    this._text = '';
-    this.append(...nodes);
-  }
-  addEventListener(type, listener) { (this.listeners[type] ??= []).push(listener); }
-  dispatchEvent(event) {
-    event.target ??= this;
-    event.preventDefault ??= () => { event.defaultPrevented = true; };
-    event.stopPropagation ??= () => { event.cancelBubble = true; };
-    for (let node = this; node; node = node.parentNode) {
-      for (const listener of node.listeners?.[event.type] ?? []) listener(event);
-      if (event.cancelBubble) break;
-    }
-    if (!event.cancelBubble) {
-      for (const listener of this.ownerDocument?.listeners?.[event.type] ?? []) listener(event);
-    }
-    return true;
-  }
-  click() { this.dispatchEvent({ type: 'click' }); }
-  contains(target) {
-    for (const child of this.children) if (child === target || child.contains?.(target)) return true;
-    return target === this;
-  }
-  querySelectorAll(selector) {
-    const matches = (node) => selector.split(',').some((part) => {
-      const s = part.trim();
-      if (s.startsWith('button')) return node.nodeName === 'button' && !node.disabled;
-      if (s.startsWith('a[href]')) return node.nodeName === 'a' && node.attrs.href;
-      if (s.startsWith('input')) return node.nodeName === 'input' && !node.disabled;
-      return s.startsWith('[tabindex]') && node.attrs.tabindex != null && node.attrs.tabindex !== '-1';
-    });
-    return this.findAll(matches).filter((node) => node !== this);
-  }
-  querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
-  focus() { if (this.ownerDocument) this.ownerDocument.activeElement = this; }
-  set textContent(value) { this.replaceChildren(); this._text = String(value); }
-  get textContent() { return this._text + this.children.map((child) => child.textContent).join(''); }
-  get classList() {
-    const node = this;
-    const values = () => new Set(node.className.split(/\s+/).filter(Boolean));
-    return {
-      contains(name) { return values().has(name); },
-      toggle(name, force) {
-        const set = values();
-        if (force === undefined ? !set.has(name) : force) set.add(name);
-        else set.delete(name);
-        node.className = [...set].join(' ');
-      },
-      add(name) { this.toggle(name, true); },
-      remove(name) { this.toggle(name, false); },
-    };
-  }
-  findAll(predicate, found = []) {
-    if (predicate(this)) found.push(this);
-    for (const child of this.children) child.findAll(predicate, found);
-    return found;
-  }
-}
+// --- minimal DOM shim (shared: test/helpers/fake-dom.js) --------------------
 
 function makeFakeDoc() {
-  const doc = {
-    listeners: {},
-    activeElement: null,
-    addEventListener(type, listener) { (this.listeners[type] ??= []).push(listener); },
-    createElement(name) { return new FakeNode(name, this); },
-    createElementNS(_namespace, name) { return new FakeNode(name, this); },
-    createTextNode(text) { return new FakeText(text, this); },
-    dispatch(type, event) {
-      event.type = type;
-      event.target ??= this;
-      event.preventDefault ??= () => { event.defaultPrevented = true; };
-      for (const listener of this.listeners[type] ?? []) listener(event);
-    },
-  };
-  doc.body = new FakeNode('body', doc);
-  doc.documentElement = new FakeNode('html', doc);
-  const ids = ['beam-svg', 'sfd-svg', 'bmd-svg', 'defl-svg', 'det-badge', 'class-note', 'result-cards', 'eq-badge', 'lab-content'];
-  const elements = Object.fromEntries(ids.map((id) => [id, new FakeNode('div', doc)]));
-  const topbar = new FakeNode('header', doc);
-  doc.body.append(topbar, elements['lab-content']);
-  elements['lab-content'].inert = false;
-  doc.getElementById = (id) => elements[id] ?? null;
-  doc.querySelector = (selector) => selector === '.topbar' ? topbar : null;
-  doc._elements = elements;
-  doc._topbar = topbar;
-  return doc;
+  return makeDoc().doc;
 }
 
 const { renderM3 } = await import('../ui/renderm3.js');
@@ -354,6 +232,6 @@ test('app teaching provider is guarded for event-less fixture documents', async 
   const { fileURLToPath } = await import('node:url');
   const path = await import('node:path');
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const src = readFileSync(path.join(here, '../ui/app.js'), 'utf8');
+  const src = readFileSync(path.join(here, '../ui/teaching.js'), 'utf8');
   assert.ok(src.includes("typeof document.addEventListener !== 'function'"));
 });

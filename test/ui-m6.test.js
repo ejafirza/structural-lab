@@ -14,38 +14,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { analyzeBeam } from '../src/analysis.js';
+import { makeDoc } from './helpers/fake-dom.js';
 
-// --- minimal DOM shim (same pattern as ui-m5) -------------------------------
-
-class FakeNode {
-  constructor(name) {
-    this.nodeName = name;
-    this.children = [];
-    this.attrs = {};
-    this._text = '';
-    this.className = '';
-    this.hidden = false;
-  }
-  setAttribute(k, v) { this.attrs[k] = String(v); }
-  append(...nodes) { this.children.push(...nodes); }
-  replaceChildren(...nodes) { this.children = [...nodes]; }
-  set textContent(v) { this._text = String(v); }
-  get textContent() { return this._text; }
-  findAll(pred, out = []) {
-    if (pred(this)) out.push(this);
-    for (const c of this.children) c.findAll(pred, out);
-    return out;
-  }
-}
+// --- minimal DOM shim (shared: test/helpers/fake-dom.js) --------------------
 
 function makeFakeDoc() {
-  const ids = ['beam-svg', 'sfd-svg', 'bmd-svg', 'det-badge', 'class-note', 'result-cards', 'eq-badge'];
-  const byId = Object.fromEntries(ids.map((id) => [id, new FakeNode('div')]));
-  return {
-    getElementById: (id) => byId[id],
-    createElementNS: (_ns, name) => new FakeNode(name),
-    createElement: (name) => new FakeNode(name),
-  };
+  return makeDoc().doc;
 }
 
 globalThis.document = makeFakeDoc();

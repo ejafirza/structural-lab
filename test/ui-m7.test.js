@@ -17,89 +17,12 @@ import { analyzeBeam } from '../src/analysis.js';
 import { emitDescriptor, MAX_PROFILE_POINTS } from '../src/loadmodel.js';
 import { fmt } from '../ui/render.js';
 
-// --- minimal DOM shim (same pattern as ui-m6, plus parent links + closest) --
+// --- minimal DOM shim (shared: test/helpers/fake-dom.js) --------------------
 
-class FakeNode {
-  constructor(name) {
-    this.nodeName = name;
-    this.children = [];
-    this.attrs = {};
-    this._text = '';
-    this.className = '';
-    this.hidden = false;
-    this.dataset = {};
-    this.value = '';
-    this.min = '';
-    this.max = '';
-    this.step = '';
-    this.disabled = false;
-    this.title = '';
-    this.listeners = {};
-    this._parent = null;
-  }
-  setAttribute(k, v) { this.attrs[k] = String(v); }
-  getAttribute(k) { return this.attrs[k]; }
-  append(...nodes) {
-    for (const n of nodes) n._parent = this;
-    this.children.push(...nodes);
-  }
-  replaceChildren(...nodes) {
-    for (const n of this.children) n._parent = null;
-    for (const n of nodes) n._parent = this;
-    this.children = [...nodes];
-  }
-  addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); }
-  dispatchEvent(evt) {
-    for (const fn of this.listeners[evt.type] ?? []) fn(evt);
-    return true;
-  }
-  /** Attribute-selector subset: [data-role="x"], [data-load-index], [data-point-index]. */
-  closest(sel) {
-    const m = sel.match(/\[data-([\w-]+)(?:="([^"]*)")?\]/);
-    if (!m) return null;
-    const attr = `data-${m[1]}`;
-    let node = this;
-    while (node) {
-      if (node.attrs[attr] != null && (m[2] === undefined || node.attrs[attr] === m[2])) return node;
-      node = node._parent;
-    }
-    return null;
-  }
-  querySelector() { return null; }
-  querySelectorAll() { return []; }
-  set textContent(v) { this._text = String(v); }
-  get textContent() { return this._text; }
-  get classList() {
-    const self = this;
-    return {
-      toggle(cls, on) {
-        const set = new Set(String(self.className).split(' ').filter(Boolean));
-        if (on) set.add(cls); else set.delete(cls);
-        self.className = [...set].join(' ');
-      },
-      add(cls) { this.toggle(cls, true); },
-      remove(cls) { this.toggle(cls, false); },
-    };
-  }
-  focus() {}
-  findAll(pred, out = []) {
-    if (pred(this)) out.push(this);
-    for (const c of this.children) c.findAll(pred, out);
-    return out;
-  }
-}
+import { makeDoc } from './helpers/fake-dom.js';
 
 function makeFakeDoc(extraIds = []) {
-  const ids = ['beam-svg', 'sfd-svg', 'bmd-svg', 'det-badge', 'class-note', 'result-cards', 'eq-badge', ...extraIds];
-  const byId = Object.fromEntries(ids.map((id) => [id, new FakeNode('div')]));
-  const doc = {
-    getElementById: (id) => byId[id],
-    createElementNS: (_ns, name) => new FakeNode(name),
-    createElement: (name) => new FakeNode(name),
-    querySelector: () => null,
-    querySelectorAll: () => [],
-  };
-  return doc;
+  return makeDoc({ extraIds }).doc;
 }
 
 globalThis.document = makeFakeDoc();
