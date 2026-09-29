@@ -38,6 +38,24 @@ export function parsePort(raw, fallback = DEFAULT_PORT) {
 
 const PORT = parsePort(process.env.PORT);
 
+/**
+ * shouldOpenBrowser(raw) — resolve the NO_OPEN environment variable.
+ *
+ * Set NO_OPEN (any of: "1", "true", "yes", "on", case-insensitive — or any
+ * non-empty value at all, so NO_OPEN=even-this works) to suppress the
+ * automatic browser tab on startup. Useful for scripts, CI and harnesses
+ * that open the page themselves.
+ *
+ * @param {unknown} raw value of process.env.NO_OPEN (string | undefined)
+ * @returns {boolean} true when the browser should be opened
+ */
+export function shouldOpenBrowser(raw) {
+  if (raw === undefined || raw === null) return true;
+  return String(raw).trim() === '';
+}
+
+const OPEN_BROWSER = shouldOpenBrowser(process.env.NO_OPEN);
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -95,6 +113,10 @@ if (isMain) {
   server.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
   console.log(`Structural Lab running at ${url}`);
+  if (!OPEN_BROWSER) {
+    console.log('(NO_OPEN is set — not opening a browser tab)');
+    return;
+  }
   // Best-effort browser open (Windows/macOS/Linux; ignore failures).
   const cmd =
     process.platform === 'win32' ? `start "" "${url}"` :

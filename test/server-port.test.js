@@ -12,7 +12,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePort } from '../server.js';
+import { parsePort, shouldOpenBrowser } from '../server.js';
 
 const DEFAULT = 8000;
 
@@ -65,4 +65,17 @@ test('importing server.js has no side effects (no server started)', async () => 
   const mod = await import('../server.js');
   assert.equal(typeof mod.parsePort, 'function');
   assert.ok(!('server' in mod), 'the http server is not exported — it stays module-private');
+});
+
+test('NO_OPEN unset or empty opens the browser', () => {
+  assert.equal(shouldOpenBrowser(undefined), true);
+  assert.equal(shouldOpenBrowser(null), true);
+  assert.equal(shouldOpenBrowser(''), true);
+  assert.equal(shouldOpenBrowser('   '), true, 'whitespace-only counts as unset');
+});
+
+test('NO_OPEN set to any non-empty value suppresses the browser open', () => {
+  for (const v of ['1', 'true', 'TRUE', 'yes', 'on', 'no', 'false', '0', 'whatever']) {
+    assert.equal(shouldOpenBrowser(v), false, `NO_OPEN="${v}" must suppress`);
+  }
 });

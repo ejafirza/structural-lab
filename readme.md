@@ -140,6 +140,11 @@ npm test       # run the full automated suite
 npm run demo   # ASCII text demo of the engine (Milestone 1)
 ```
 
+Set `NO_OPEN=1` to skip the automatic browser tab (`NO_OPEN=1 npm start`) —
+handy for scripts and remote shells. An invalid `PORT` (including the
+`PORT=0` exported by some shells, which Node would otherwise read as
+"bind a random port") falls back to 8000 with a console warning.
+
 > ⚠️ Open the app via `npm start`, not by double-clicking `ui/index.html` —
 > browsers block ES-module imports over `file://`.
 
@@ -150,7 +155,8 @@ themes and responsive layouts. The complete M5–M12 browser regression matrix p
 functional and layout assertions passed — M11 teaching 51/51 (with the M12 checks), M10 shell 22/22, M5 consolidation
 32/32, M6 multi-load 22/22, M7 profile 30/30, M8 deflection 15/15, and all five layout audits
 clean (27 shell checks, 6/6, 6/6, 8/8, 8/8) — with no browser console/runtime errors and
-`verify/tmp/` empty after the run. The unit suite stands at 191/191 in the same state.
+`verify/tmp/` empty after the run. The unit suite stands at 201/201 in the current
+state (the count grows as new behavior is locked in; `npm test` is always current).
 CI runs the unit suite on Node 20 and 22 against a case-sensitive filesystem.
 Educational tool — **not** a professional design-verification system.
 
@@ -365,7 +371,8 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
 | Input ranges (span/load/w₁/w₂/region) | `ui/app.js` (`bindNumberSlider` min/max) |
 | Labels / units text | `ui/index.html` and `ui/renderm3.js` string literals |
 | Diagram sizes / margins | `ui/renderm3.js` (`VB_W`, `ML`, `MR`, `H_*` constants) |
-| Server port | `server.js` (`PORT`, default 8000) or `PORT=… npm start` |
+| Server port | `server.js` (`PORT`, default 8000) or `PORT=… npm start`; invalid values fall back to 8000 |
+| Auto-open browser | `NO_OPEN=… npm start` (any non-empty value) skips the browser tab |
 | **The engine** | `src/engine.js`, `src/analysis.js` — do not touch unless a genuine defect is found |
 
 ## Testing & verification
