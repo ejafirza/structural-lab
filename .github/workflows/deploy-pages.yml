@@ -1,0 +1,55 @@
+# Deploy the live demo to GitHub Pages.
+#
+# The app is pure static files + ES modules with zero dependencies — no build
+# step exists by design. The "build" is a copy: ui/* at the artifact root,
+# src/ beside it, which is exactly how the relative imports in ui/*.js
+# (`../src/analysis.js`, `./state.js`, …) resolve on any static host.
+#
+# One-time setup (repo owner): Settings → Pages → Build and deployment →
+# Source: "GitHub Actions". Until then this workflow's deploy step will
+# report a pages-build-deployment environment that does not exist yet.
+name: Deploy demo to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guard: run the unit suite before publishing anything.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test
+
+      - name: Stage site (ui/ at root, src/ beside it)
+        run: |
+          mkdir -p site
+          cp -r ui/* site/
+          cp -r src site/src
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

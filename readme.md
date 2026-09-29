@@ -1,5 +1,10 @@
 # Structural Lab
 
+[![Live demo](https://img.shields.io/badge/demo-live-brightgreen)](https://ejafirza.github.io/structural-lab/)
+[![CI](https://github.com/ejafirza/structural-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/ejafirza/structural-lab/actions/workflows/ci.yml)
+
+**▶ [Try the live demo](https://ejafirza.github.io/structural-lab/) — no install, runs in your browser.**
+
 Interactive Structural Analysis Learning Laboratory — educational software for
 civil/structural engineering students, built around the loop
 **Experiment → Observe → Question → Understand**.
@@ -132,7 +137,11 @@ immediately.
 
 ## Quick start
 
-Requires Node.js ≥ 18. Zero dependencies, no install step.
+**Just want to try it?** Open the [live demo](https://ejafirza.github.io/structural-lab/)
+— the same app, deployed from `main` on every push (workflow in
+[.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml)).
+
+To run it locally instead, requires Node.js ≥ 18. Zero dependencies, no install step.
 
 ```bash
 npm start      # start the app → http://localhost:8000 (browser opens)
