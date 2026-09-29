@@ -12,7 +12,31 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.PORT || 8000);
+const DEFAULT_PORT = 8000;
+
+/**
+ * parsePort(raw) — resolve the PORT environment variable defensively.
+ *
+ * A shell may export PORT=0 (or leave garbage in it); Node treats port 0 as
+ * "bind an ephemeral port", which silently strands the app (and the browser
+ * that just opened) on a random URL. Anything that is not an integer in
+ * 1..65535 falls back to the documented default with a console warning.
+ *
+ * @param {unknown} raw value of process.env.PORT (string | undefined)
+ * @param {number} [fallback] documented default (8000)
+ * @returns {number} a safe port number
+ */
+export function parsePort(raw, fallback = DEFAULT_PORT) {
+  const port = Number(String(raw ?? '').trim());
+  if (raw === undefined || raw === null || String(raw).trim() === '') return fallback;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    console.warn(`server.js: ignoring invalid PORT="${raw}" — using ${fallback}`);
+    return fallback;
+  }
+  return port;
+}
+
+const PORT = parsePort(process.env.PORT);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -61,7 +85,14 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+// Only start listening (and open the browser) when run directly — importing
+// server.js (e.g. from a test) must stay side-effect-free.
+const modulePath = fileURLToPath(import.meta.url);
+const isMain = Boolean(process.argv[1]) &&
+  path.resolve(process.argv[1]) === path.resolve(modulePath);
+
+if (isMain) {
+  server.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
   console.log(`Structural Lab running at ${url}`);
   // Best-effort browser open (Windows/macOS/Linux; ignore failures).
@@ -71,3 +102,4 @@ server.listen(PORT, () => {
     `xdg-open "${url}"`;
   exec(cmd, () => {});
 });
+}
