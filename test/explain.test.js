@@ -102,7 +102,8 @@ test('every displayed reaction card routes to that component and support side', 
     ['Reaction HA', 'Hx', 'left'], ['Reaction VA', 'Vy', 'left'], ['Reaction VB', 'Vy', 'right'],
   ]) {
     const item = groupForCard(result, label);
-    assert.ok(item.title.includes(`${key === 'Hx' ? 'H' : 'V'}₍${side === 'left' ? 'A' : 'B'}₎`), label);
+    // M12 Fix 7: semantic notation — the UI renders `_X` as a true subscript.
+    assert.ok(item.title.includes(`${key === 'Hx' ? 'H' : 'V'}_${side === 'left' ? 'A' : 'B'}`), label);
     assert.ok(item.steps.some((step) => step.value === result.reactions[side][key]), label);
   }
   assert.equal(groupForCard(result, 'Unknown card'), null);
@@ -114,9 +115,9 @@ test('cantilever reaction explanations use the wall outputs and actual load arm 
     const side = supports.left === 'fixed' ? 'left' : 'right';
     const letter = side === 'left' ? 'A' : 'B';
     const reaction = groupForCard(result, `Reaction M${letter}`);
-    assert.ok(reaction.steps.some((step) => step.equation.includes('ΣM₍wall₎ = 0')));
+    assert.ok(reaction.steps.some((step) => step.equation.includes('ΣM_wall = 0')));
     assert.ok(reaction.steps.at(-1).value === result.reactions[side].Mz);
-    assert.ok(reaction.steps.some((step) => step.substitution.includes(`M₍${letter}₎ = 10 × ${side === 'left' ? '2' : '4'} kN·m`)));
+    assert.ok(reaction.steps.some((step) => step.substitution.includes(`M_${letter} = 10 × ${side === 'left' ? '2' : '4'} kN·m`)));
 
     const moment = groupForCard(result, 'Max bending moment');
     assert.equal(moment.steps.at(-1).value, result.maxMoment.value);
@@ -213,11 +214,11 @@ test('equilibrium values are quoted verbatim from the engine residual block', ()
 
   const rightCantilever = analyzeBeam({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 4 }], supports: { left: 'free', right: 'fixed' } });
   const labels = derivationGroups(rightCantilever).flatMap((item) => item.steps.map((step) => `${step.equation} ${step.substitution}`)).join(' ');
-  for (const symbol of ['ΣFᵧ', 'ΣM₍wall₎', 'V₍wall₎', 'M₍wall₎', 'M₍B₎']) assert.ok(labels.includes(symbol), symbol);
+  for (const symbol of ['ΣFᵧ', 'ΣM_wall', 'V_wall', 'M_wall', 'M_B']) assert.ok(labels.includes(symbol), symbol);
 
   const simplySupported = derivationGroups(analyzeBeam({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 2 }], supports: pinRoller }))
     .flatMap((item) => item.steps.map((step) => `${step.equation} ${step.substitution}`)).join(' ');
-  for (const symbol of ['ΣM₍A₎', 'R₍A₎', 'R₍B₎']) assert.ok(simplySupported.includes(symbol), symbol);
+  for (const symbol of ['ΣM_A', 'R_A', 'R_B']) assert.ok(simplySupported.includes(symbol), symbol);
 });
 
 test('unsolved and missing results show classification honesty, never fake engineering answers', () => {

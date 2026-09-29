@@ -24,7 +24,44 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** Circled digits ①–⑥ tying each drawn load to its load-list row (M6). */
 const CIRCLED = ['①', '②', '③', '④', '⑤', '⑥'];
-const atSupport = (symbol, letter) => `${symbol}₍${letter}₎`;
+const atSupport = (symbol, letter) => `${symbol}_${letter}`;
+
+/**
+ * M12 Fix 7: true typographic subscripts. Semantic notation uses `_X` runs
+ * (V_A, M_B, ΣM_A, V_wall); presentation splits a label into plain/sub
+ * segments. SVG text nodes get <tspan baseline-shift="sub"> children; HTML
+ * nodes get <sub> elements. The plain string (segments concatenated) equals
+ * the semantic form, so textContent-based assertions keep working.
+ */
+function subSegments(str) {
+  return String(str).split(/(_[A-Za-z][A-Za-z0-9]*)/g)
+    .filter((part) => part !== '')
+    .map((part) => part.startsWith('_') ? { sub: part.slice(1) } : { text: part });
+}
+
+function appendSubSegments(node, str, { svgNs = false } = {}) {
+  for (const seg of subSegments(str)) {
+    if (seg.sub === undefined) {
+      node.append(textNode(seg.text));
+    } else if (svgNs) {
+      const t = document.createElementNS(SVG_NS, 'tspan');
+      t.setAttribute('baseline-shift', 'sub');
+      t.setAttribute('font-size', '70%');
+      t.textContent = seg.sub;
+      node.append(t);
+    } else {
+      const s = document.createElement('sub');
+      s.textContent = seg.sub;
+      node.append(s);
+    }
+  }
+}
+
+function textNode(text) {
+  if (typeof document.createTextNode === 'function') return document.createTextNode(text);
+  // Fake-DOM fallback: a plain object shaped like the shared FakeText.
+  return { nodeName: '#text', textContent: text, parentNode: null, findAll: (p, out = []) => out };
+}
 
 // --- label placement (pure geometry — no engineering mathematics) ----------
 
@@ -129,7 +166,9 @@ function txt(x, y, str, o = {}) {
   for (const [k, v] of Object.entries(o)) {
     if (!KNOWN.includes(k) && !(k in attrs)) attrs[k] = String(v);
   }
-  return el('text', attrs, str);
+  const node = el('text', attrs, null);
+  if (str != null) appendSubSegments(node, String(str), { svgNs: true });
+  return node;
 }
 
 function h(tag, cls, text) {
@@ -759,9 +798,12 @@ function renderDeflectionM3(svg, state, result, xm, determinate) {
 }
 
 function placeholder(svg, result) {
+  // M12 Fix 2: the empty panels must read as intentional teaching moments,
+  // not breakage — each names the reason and routes to the glossary door on
+  // the unsolved Reactions card (which carries data-term statically-…).
   const msg = result.classification.status === 'indeterminate'
-    ? 'Statically indeterminate — not solved here (see note above)'
-    : 'Unstable (mechanism) — not solved here (see note above)';
+    ? 'Not solved — this support setup needs methods beyond statics. Why? Activate the Reactions card.'
+    : 'Not solved — the supports do not restrain the beam. Why? Activate the Reactions card.';
   svg.append(txt(VB_W / 2, 60, msg, { fill: C.muted, italic: true, size: 13.5, halo: true }));
 }
 
@@ -795,26 +837,46 @@ function renderClassNote(doc, result) {
 function reactionCards(result) {
   const NAME = { Hx: 'H', Vy: 'V', Mz: 'M' };
   const UNIT = { Hx: 'kN', Vy: 'kN', Mz: 'kN·m' };
-  const out = [];
+  const bySide = {};
   for (const [side, letter] of [['left', 'A'], ['right', 'B']]) {
     const r = result.reactions[side];
+    const cards = {};
     for (const [comp, val] of Object.entries(r)) {
       if (comp === 'type') continue;
-      out.push({
+      cards[comp] = {
         label: `Reaction ${atSupport(NAME[comp], letter)}`,
         value: `${fmt(val)} ${UNIT[comp]}`,
+        // M12 Fix 6: the trivial zero horizontal reaction reads as an insight
+        // (no horizontal loads → no H reaction), not as the headline result;
+        // `defer` renders it after the Mmax/deflection cards.
+        sub: comp === 'Hx' ? 'no horizontal loads' : undefined,
+        defer: comp === 'Hx',
         steps: `Reaction ${NAME[comp]}${letter}`,
-      });
+      };
     }
+    bySide[side] = cards;
   }
-  return out;
+  // M12 Fix 6: lead with the meaningful reactions (V at each support); the
+  // trivial zero H cards are deferred to the very end (after Mmax/deflection)
+  // by renderResultCards. Fixed supports may not carry every component
+  // (pin: no Mz; roller: neither Hx nor Mz) → filter.
+  const order = [
+    bySide.left.Vy, bySide.right.Vy, bySide.left.Mz, bySide.right.Mz,
+    bySide.left.Hx, bySide.right.Hx,
+  ];
+  return order.filter(Boolean);
 }
 
 function cardNode(c) {
   const node = h('div', c.accent ? 'card accent' : 'card');
-  node.append(h('span', 'card-label', c.label));
+  const label = h('span', 'card-label', null);
+  appendSubSegments(label, c.label);
+  node.append(label);
   node.append(h('span', 'card-value', c.value));
   if (c.sub) node.append(h('span', 'card-sub', c.sub));
+  // M12 Fix 4a: solved doors announce themselves — a quiet persistent cue so
+  // the worked-derivation feature is discoverable without reading prose.
+  if (c.steps) node.append(h('span', 'card-how', 'How?'));
   // M9 teaching door: solved cards carry data-steps (their worked derivation,
   // from explain.js over the FINISHED result); unsolved cards carry a glossary
   // term explaining WHY they show '–'. Label text is untouched (the annotation
@@ -838,7 +900,8 @@ function renderResultCards(doc, state, result) {
   const cards = [];
 
   if (result.classification.status === 'determinate') {
-    cards.push(...reactionCards(result));
+    const reactions = reactionCards(result);
+    cards.push(...reactions.filter((c) => !c.defer));
     cards.push({
       label: 'Max bending moment',
       value: `${fmt(result.maxMoment.value)} kN·m`,
@@ -852,6 +915,7 @@ function renderResultCards(doc, state, result) {
       sub: `${result.deflection.max.sign} · at x = ${fmt(result.deflection.max.position)} m · E·I = ${fmt(result.deflection.EI)} kN·m²`,
       steps: 'Max deflection',
     });
+    cards.push(...reactions.filter((c) => c.defer));
   } else {
     cards.push({ label: 'Reactions', value: '–', sub: 'not solved by statics', term: 'statically-indeterminate' });
     cards.push({ label: 'Max bending moment', value: '–', sub: 'not solved by statics', term: 'statically-indeterminate' });

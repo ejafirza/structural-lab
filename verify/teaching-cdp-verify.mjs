@@ -129,21 +129,23 @@ try {
   await evaluate(`document.querySelectorAll('#result-cards .card').forEach(card => { if (card.getAttribute('data-steps') === 'Reaction VB') card.focus(); })`);
   await pressKey('Enter', 'Enter', 13);
   state = await wait();
-  check('Enter opens the specific Reaction VB explanation', state.open && state.title.includes('reaction V₍B₎'));
-  check('reaction shows equation, substitution and 5 kN engine answer', state.equations.some((equation) => equation.includes('R₍B₎ = P·a / L')) && state.substitutions.includes('R₍B₎ = 10 × 3 / 6 kN') && state.values.some((value) => value.includes('5 kN')));
+  // Rendered subscript segments concatenate: the dialog title reads "VB".
+  check('Enter opens the specific Reaction VB explanation', state.open && state.title.includes('reaction VB'));
+  check('reaction shows equation, substitution and 5 kN engine answer', state.equations.some((equation) => equation.includes('RB = P·a / L')) && state.substitutions.includes('RB = 10 × 3 / 6 kN') && state.values.some((value) => value.includes('5 kN')));
   check('reaction separates equation, substitution and result steps', state.headings.includes('Take moments about A') && state.headings.includes('Substitute the given values') && state.headings.includes('Report the engine result'));
   await escape();
 
-  await click('#result-cards .card:nth-child(4)');
+  // M12 Fix 6 card order: VA, VB, Mmax (3rd), deflection (4th), HA last.
+  await click('#result-cards .card:nth-child(3)');
   state = await wait();
   check('point-load Mmax uses valid formula/substitution and 15 kN·m engine answer', state.open && state.equations.some((equation) => equation.includes('Mₘₐₓ = P·a·b / L')) && state.substitutions.includes('Mₘₐₓ = 10 × 3 × 3 / 6 kN·m') && state.values.some((value) => value.includes('15 kN·m')));
   await escape();
-  await click('#result-cards .card:last-child');
+  await click('#result-cards .card:nth-child(4)');
   state = await wait();
   check('centered point deflection uses its valid formula and substitution', state.equations.some((equation) => equation.includes('P·L³ / (48·E·I)')) && state.substitutions.includes('vₘₐₓ = 10 × 6³ / (48 × 20000) m'));
   await escape();
   await evaluate(`(() => { const input=document.getElementById('num-pos'); input.value='2'; input.dispatchEvent(new Event('input')); })()`);
-  await click('#result-cards .card:last-child');
+  await click('#result-cards .card:nth-child(4)');
   state = await wait();
   check('off-center point deflection avoids the centered-load shortcut', state.equations.includes('E·I·v″(x) = −M(x)') && state.equations.every((equation) => !equation.includes('/ (48·E·I)')));
   await escape();
@@ -168,7 +170,7 @@ try {
   check('point + stepped-profile Mmax lists actual point and profile inputs', state.given.some((datum) => datum.includes('P = 10 kN')) && state.given.some((datum) => datum.includes('profile points (x, w)')));
   check('mixed-profile Mmax reports engine peak method and result without numeric shortcut', state.equations.some((equation) => equation.includes('Candidates: V(x*) = 0')) && state.headings.includes('Check peak candidates') && state.headings.includes('Report the engine result') && state.values.length === 1 && !state.substitutions.some((text) => /Mmax\s*=/.test(text)));
   await escape();
-  await click('#result-cards .card:last-child');
+  await click('#result-cards .card:nth-child(4)');
   state = await wait();
   check('mixed-profile deflection lists inputs/E·I and exact integration method', state.given.some((datum) => datum.includes('P = 10 kN')) && state.given.some((datum) => datum.includes('profile points (x, w)')) && state.given.some((datum) => datum.includes('E·I =')) && state.equations.includes('E·I·v″(x) = −M(x)') && !state.equations.some((equation) => equation.includes('P·L³ / (48·E·I)')));
   check('mixed-profile deflection reports only its engine answer', state.headings.includes('Report the engine result') && state.values.length === 1 && state.values[0].startsWith('Result:'));
@@ -179,6 +181,9 @@ try {
   state = JSON.parse(await snapshot());
   const equilibrium = await evaluate(`(() => {const e=document.getElementById('eq-badge');return {text:e.textContent,aria:e.getAttribute('aria-label'),tabindex:e.getAttribute('tabindex')};})()`);
   check('indeterminate cards explain the unsolved state without derivation routes', state.cards.length >= 2 && state.cards.every((card) => card.term === 'statically-indeterminate' && !card.steps));
+  // M12 Fix 2: empty diagram panels point to the teaching door.
+  const placeholderText = await evaluate(`[...document.querySelectorAll('.shear-svg-placeholder, #sfd-svg text, #bmd-svg text, #defl-svg text')].map(t => t.textContent).join(' ')`);
+  check('unsolved diagrams read as intentional and route to the Reactions card', placeholderText.includes('Not solved') && placeholderText.includes('Activate the Reactions card'), placeholderText.slice(0, 90));
   check('unsolved equilibrium state is truthful and not tabbable', equilibrium.text === 'Not solved' && equilibrium.aria.includes('no equilibrium residuals') && equilibrium.tabindex === '-1');
   await click('#result-cards .card');
   state = await wait();
@@ -194,6 +199,18 @@ try {
   await reload();
   state = JSON.parse(await snapshot());
   check('reload restores default solved beam without stale modal', !state.open && !state.inertMain && state.cards.some((card) => card.value === '15 kN·m'));
+
+  // M12 Fix 1 + Fix 5: editor identity header and the Reset control.
+  const editingNote = await evaluate(`document.getElementById('editing-note')?.textContent ?? ''`);
+  check('editor names the load being edited', editingNote === 'Editing: Load 1 — point load', editingNote);
+  await evaluate(`document.getElementById('btn-add-point').click(); document.getElementById('btn-add-point').click()`);
+  await sleep(150);
+  const builtState = JSON.parse(await snapshot());
+  check('identity header follows the auto-selected third load', builtState.cards.length >= 0 && await evaluate(`document.getElementById('editing-note').textContent`) === 'Editing: Load 3 — point load');
+  await evaluate(`document.getElementById('btn-reset').click()`);
+  await sleep(250);
+  const resetState = JSON.parse(await snapshot());
+  check('reset returns the factory beam (1 load, VA 5 kN, Mmax 15 kN·m)', resetState.cards.map((c) => c.value)[0] === '5 kN' && resetState.cards.some((c) => c.value === '15 kN·m') && await evaluate(`document.querySelectorAll('#load-list .load-row').length`) === 1);
 
   // Eight SVG layout fixtures and desktop/phone dialog geometry, reusing same Edge/profile.
   const svgAudit = () => evaluate(`(() => {

@@ -10,7 +10,9 @@ const resultStep = (title, explanation, equation, substitution, value, unit, fin
   title, explanation, equation, substitution, value, unit, final,
 });
 const group = (title, intro, given, steps) => ({ title, intro, given, steps });
-const atSupport = (symbol, letter) => `${symbol}₍${letter}₎`;
+// M12 Fix 7: semantic notation — the UI renders `_X` runs as true
+// typographic subscripts (HTML <sub> / SVG <tspan>). No presentation glyphs.
+const atSupport = (symbol, letter) => `${symbol}_${letter}`;
 
 function inputSummary(result) {
   const { input } = result;
@@ -179,7 +181,7 @@ function reactionsGroup(result, label = 'Reaction VA') {
   } else if (support.type === 'fixed' && component === 'V') {
     const point = only?.type === 'point';
     const uniform = isFullSpanUniform(only, input.span);
-    const equation = point ? 'ΣFᵧ = 0  →  V₍wall₎ = P' : uniform ? 'ΣFᵧ = 0  →  V₍wall₎ = w·L' : 'ΣFᵧ = 0  →  V₍wall₎ = R';
+    const equation = point ? 'ΣFᵧ = 0  →  V_wall = P' : uniform ? 'ΣFᵧ = 0  →  V_wall = w·L' : 'ΣFᵧ = 0  →  V_wall = R';
     steps.push(resultStep(
       'Balance vertical forces',
       'The fixed end carries the beam’s total downward load.',
@@ -187,15 +189,15 @@ function reactionsGroup(result, label = 'Reaction VA') {
     ));
     if (simpleCase) {
       const substitution = point
-        ? `V₍wall₎ = ${n3(only.magnitude)} kN`
-        : `V₍wall₎ = ${n3(uniformIntensity(only))} × ${n3(input.span)} kN`;
+        ? `V_wall = ${n3(only.magnitude)} kN`
+        : `V_wall = ${n3(uniformIntensity(only))} × ${n3(input.span)} kN`;
       steps.push(substitutionStep(substitution));
     }
   } else if (support.type === 'fixed' && component === 'M') {
     const point = only?.type === 'point';
     const uniform = isFullSpanUniform(only, input.span);
-    const equation = point ? 'ΣM₍wall₎ = 0  →  M₍wall₎ = P·d'
-      : uniform ? 'ΣM₍wall₎ = 0  →  M₍wall₎ = w·L² / 2' : 'ΣM₍wall₎ = 0';
+    const equation = point ? 'ΣM_wall = 0  →  M_wall = P·d'
+      : uniform ? 'ΣM_wall = 0  →  M_wall = w·L² / 2' : 'ΣM_wall = 0';
     const substitution = point
       ? `${atSupport('M', letter)} = ${n3(only.magnitude)} × ${n3(pointLoadDistanceFromFixedEnd(only, input.supports, input.span))} kN·m`
       : uniform ? `${atSupport('M', letter)} = ${n3(uniformIntensity(only))} × ${n3(input.span)}² / 2 kN·m` : `Engine support moment ${atSupport('M', letter)} = ${n3(value)} kN·m`;
@@ -217,8 +219,8 @@ function reactionsGroup(result, label = 'Reaction VA') {
   } else if (component === 'V' && side === 'right') {
     const point = only?.type === 'point';
     const uniform = isFullSpanUniform(only, input.span);
-    const equation = point ? 'ΣM₍A₎ = 0  →  R₍B₎ = P·a / L'
-      : uniform ? 'ΣM₍A₎ = 0  →  R₍B₎ = w·L / 2' : 'ΣM₍A₎ = 0  →  R₍B₎ = R·x̄ / L';
+    const equation = point ? 'ΣM_A = 0  →  R_B = P·a / L'
+      : uniform ? 'ΣM_A = 0  →  R_B = w·L / 2' : 'ΣM_A = 0  →  R_B = R·x̄ / L';
     steps.push(resultStep(
       'Take moments about A',
       'The support reaction at B balances the moment of the combined load resultant about A.',
@@ -233,8 +235,8 @@ function reactionsGroup(result, label = 'Reaction VA') {
     const point = only?.type === 'point';
     const uniform = isFullSpanUniform(only, input.span);
     const b = input.b ?? input.span - (only?.position ?? 0);
-    const equation = point ? 'ΣM₍A₎ = 0  →  R₍A₎ = P·b / L'
-      : uniform ? 'ΣM₍A₎ = 0  →  R₍A₎ = w·L / 2' : 'ΣFᵧ = 0  →  R₍A₎ = R − R₍B₎';
+    const equation = point ? 'ΣM_A = 0  →  R_A = P·b / L'
+      : uniform ? 'ΣM_A = 0  →  R_A = w·L / 2' : 'ΣFᵧ = 0  →  R_A = R − R_B';
     steps.push(resultStep(
       'Balance moments about A, then vertical forces',
       'The left reaction balances the total downward load and the right support reaction.',
@@ -310,7 +312,7 @@ function momentGroup(result) {
       steps.push(resultStep(
         'For a cantilever, check the fixed wall',
         'The largest bending-moment magnitude occurs at the fixed end.',
-        'Mₘₐₓ = |M₍wall₎|', '', null, '', false,
+        'Mₘₐₓ = |M_wall|', '', null, '', false,
       ));
     }
     intro = 'A cantilever’s peak moment is at its fixed wall.';

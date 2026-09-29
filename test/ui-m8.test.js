@@ -166,3 +166,45 @@ test('span controls normalize, clamp, and recover blank input', async () => {
     assert.equal(slider.value, expected);
   }
 });
+
+test('editor names what is being edited and presets open for distributed loads', async () => {
+  const { elements } = await bootApp();
+  // Point load selected by default: identity header names it, presets hidden.
+  assert.equal(elements['editing-note'].textContent, 'Editing: Load 1 — point load');
+  assert.equal(elements['ctl-presets'].hidden, true);
+
+  // Add a distributed load → it is auto-selected; header + disclosure follow.
+  elements['btn-add-distributed'].dispatchEvent({ type: 'click' });
+  assert.equal(elements['editing-note'].textContent, 'Editing: Load 2 — distributed (2 shape points)');
+  assert.equal(elements['ctl-presets'].hidden, false);
+
+  // Back to the point load: header reverts, presets close (they do not apply).
+  elements['load-list'].children[0].children[0].dispatchEvent({ type: 'click' });
+  assert.equal(elements['editing-note'].textContent, 'Editing: Load 1 — point load');
+  assert.equal(elements['ctl-presets'].hidden, true);
+});
+
+test('reset restores the exact factory beam from one shared default', async () => {
+  const { elements } = await bootApp();
+  // Build a six-load monster and change supports + stiffness.
+  elements['sel-support-right'].value = 'fixed';
+  elements['sel-support-right'].dispatchEvent({ type: 'change', target: elements['sel-support-right'] });
+  for (let i = 0; i < 5; i++) elements['btn-add-point'].dispatchEvent({ type: 'click' });
+  elements['num-ei'].value = '123456';
+  elements['num-ei'].dispatchEvent({ type: 'input' });
+  elements['num-span'].value = '12';
+  elements['num-span'].dispatchEvent({ type: 'input' });
+  assert.equal(elements['load-count'].textContent, '6 loads');
+
+  elements['btn-reset'].dispatchEvent({ type: 'click' });
+  assert.equal(elements['load-count'].textContent, '1 load');
+  assert.equal(elements['num-span'].value, '6');
+  assert.equal(elements['num-load'].value, '10');
+  assert.equal(elements['num-pos'].value, '3');
+  assert.equal(elements['sel-support-left'].value, 'pin');
+  assert.equal(elements['sel-support-right'].value, 'roller');
+  assert.equal(elements['num-ei'].value, fmt(20000));
+  assert.equal(elements['sel-support-right'].disabled, false, 'add buttons re-enabled after reset');
+  const cards = elements['result-cards'].findAll((n) => n.className === 'card-value').map((n) => n.textContent);
+  assert.deepEqual(cards, ['5 kN', '5 kN', '15 kN·m', '2.25 mm', '0 kN'], 'M12 Fix 6: the zero H card reads last');
+});

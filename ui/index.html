@@ -23,7 +23,8 @@
 
   <main class="lab" id="lab-content">
     <section class="panel diagram-panel beam-panel" aria-label="Beam diagram">
-      <h2>Beam <span class="panel-sub beam-cue">Click or tap a support symbol to cycle it. <span class="desktop-beam-cue">Right-click the beam to add a load. </span>Hold and drag a load to move it; use Model controls on touch.</span></h2>
+      <h2>Beam</h2>
+      <p class="beam-cue">Click or tap a support symbol to cycle it. <span class="desktop-beam-cue">Right-click the beam to add a load. </span>Hold and drag a load to move it; use Model controls on touch.</p>
       <svg id="beam-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img" tabindex="-1"
            aria-label="Beam with two end supports and its loads (point or distributed)"></svg>
       <div id="beam-context-menu" class="beam-context-menu" role="group" aria-label="Add a load near the selected beam position" hidden>
@@ -78,10 +79,12 @@
             <div class="load-add-row">
               <button type="button" id="btn-add-point" class="load-add">+ Point load</button>
               <button type="button" id="btn-add-distributed" class="load-add">+ Distributed load</button>
+              <button type="button" id="btn-reset" class="load-add reset" title="Restore the default beam: 6 m span, one 10 kN point load at midspan, pin + roller">Reset</button>
             </div>
             <p id="load-status" class="visually-hidden" role="status" aria-live="polite"></p>
           </div>
           <div class="load-editor-grid">
+            <p id="editing-note" class="editing-note" role="status"></p>
             <div class="ctl" id="ctl-load">
               <label for="num-load"><span data-term="point-load" tabindex="0" role="button">Point load P ↓</span></label>
               <div class="ctl-row">

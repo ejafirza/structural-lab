@@ -89,8 +89,8 @@ test('M11 reduces repeated copy but keeps essential units, sign conventions and 
   const { doc } = renderReferencePointBeam();
   const renderedLabels = doc.getElementById('result-cards').children
     .map((card) => card.children.find((child) => child.className === 'card-label').textContent);
-  assert.deepEqual(renderedLabels, ['Reaction H₍A₎', 'Reaction V₍A₎', 'Reaction V₍B₎', 'Max bending moment', 'Max deflection'],
-    'M9 derivation card labels remain unchanged');
+  assert.deepEqual(renderedLabels, ['Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection', 'Reaction HA'],
+    'M12 Fix 6+7: meaningful reactions lead, zero H last, semantic _X labels');
 });
 
 test('live SVG palette references CSS theme tokens; frozen M1 renderer remains untouched', () => {
@@ -117,8 +117,8 @@ test('M3 still displays the same engine results and result-card labels after she
   const cards = doc.getElementById('result-cards').children;
   const labels = cards.map((card) => card.children.find((child) => child.className === 'card-label').textContent);
   const values = cards.map((card) => card.children.find((child) => child.className === 'card-value').textContent);
-  assert.deepEqual(labels, ['Reaction H₍A₎', 'Reaction V₍A₎', 'Reaction V₍B₎', 'Max bending moment', 'Max deflection']);
-  assert.deepEqual(values, ['0 kN', '5 kN', '5 kN', '15 kN·m', `${fmt(result.deflection.max.value * 1000)} mm`]);
+  assert.deepEqual(labels, ['Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection', 'Reaction HA']);
+  assert.deepEqual(values, ['5 kN', '5 kN', '15 kN·m', `${fmt(result.deflection.max.value * 1000)} mm`, '0 kN']);
   assert.equal(doc.getElementById('eq-badge').textContent, 'Balanced ✓');
   assert.equal(doc.getElementById('eq-badge').getAttribute('aria-label'), 'Balanced. Activate to inspect the equilibrium residuals.');
   const texts = doc.getElementById('beam-svg').findAll((n) => n.nodeName === 'text').map((n) => n.textContent);

@@ -74,7 +74,7 @@ read exactly how on each reaction card.`,
     body: `The vertical reaction is the upward push a support gives the beam. It
 balances the downward loads so that the total vertical force adds to zero
 (ΣFᵧ = 0). In the drawings it is the green arrow at each support, labelled
-V₍A₎ and V₍B₎ in [[units]] (kN).`,
+V_A and V_B in [[units]] (kN).`,
     subs: [],
     seeAlso: ['reaction', 'equilibrium-equations'],
   },

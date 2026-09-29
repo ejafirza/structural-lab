@@ -63,11 +63,11 @@ test('renderM3 shows determinate pin+roller: reactions + sagging Mmax below axis
 
   const values = cardValues(doc);
   assert.ok(values.includes('0 kN'), 'HA = 0 (pin horizontal reaction, no horizontal load)');
-  assert.equal(values.filter((v) => v === '5 kN').length, 2, 'V₍A₎ and V₍B₎ both 5 kN');
+  assert.equal(values.filter((v) => v === '5 kN').length, 2, 'V_A and V_B both 5 kN');
   assert.ok(values.includes('15 kN·m'), 'Mₘₐₓ = 15 kN·m');
   const reactionTexts = doc.getElementById('beam-svg').findAll((n) => n.nodeName === 'text').map((n) => n.textContent);
-  assert.ok(reactionTexts.includes('V₍A₎ = 5 kN'));
-  assert.ok(reactionTexts.includes('V₍B₎ = 5 kN'));
+  assert.ok(reactionTexts.includes('VA = 5 kN'), 'V_A rendered (textContent = semantic form)');
+  assert.ok(reactionTexts.includes('VB = 5 kN'), 'V_B rendered');
   assert.ok(cardSubs(doc).some((t) => t.includes('sagging')), 'Mmax labeled sagging');
 
   // Load handle present and focusable
@@ -97,10 +97,10 @@ test('renderM3 shows cantilever: hogging Mmax ABOVE the axis, sign labeled', () 
 
   const values = cardValues(doc);
   assert.ok(values.includes('10 kN'), 'VA = P = 10 kN');
-  assert.ok(values.includes('20 kN·m'), 'M₍A₎ = P·a = 20 kN·m');
+  assert.ok(values.includes('20 kN·m'), 'M_A = P·a = 20 kN·m');
   const reactionTexts = doc.getElementById('beam-svg').findAll((n) => n.nodeName === 'text').map((n) => n.textContent);
-  assert.ok(reactionTexts.includes('V₍A₎ = 10 kN'));
-  assert.ok(reactionTexts.includes('M₍A₎ = 20 kN·m'));
+  assert.ok(reactionTexts.includes('VA = 10 kN'));
+  assert.ok(reactionTexts.includes('MA = 20 kN·m'));
   assert.ok(cardSubs(doc).some((t) => t.includes('hogging')), 'Mₘₐₓ labeled hogging');
 
   // Hogging: peak ABOVE the axis (tension side up)

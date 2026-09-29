@@ -94,13 +94,22 @@ civil/structural engineering students, built around the loop
   activation, inerts the whole page background, traps focus and restores focus/state on
   close. E·I stays visible for every determinate load kind. Full browser verification
   (2026-09-29) is recorded in `plan-m11.md` §7.
-- **Teaching layer (M9, refined after M11):** activate a marked term or info button to
+- **Teaching layer (M9, refined after M11, M12 polish):** activate a marked term or info button to
   read its hand-written explanation; blue inline links open related definitions in the
   same dialog, with Back through the exploration trail. Result cards still open worked
-  explanations. Standard cases show valid equations and substitutions. Mixed/profile
-  cases show actual inputs and method, with engine outputs kept distinct from the
-  method—no fabricated intermediate values. Unsolved beams explain why without inventing
-  results.
+  explanations (marked with a quiet "How?" cue, M12). Standard cases show valid equations
+  and substitutions. Mixed/profile cases show actual inputs and method, with engine
+  outputs kept distinct from the method—no fabricated intermediate values. Unsolved
+  beams explain why without inventing results, and every empty diagram panel routes to
+  that explanation (M12).
+- **M12 student-empathy pass (29 Sep 2026):** an editor identity note ("Editing: Load N
+  — kind") that follows the selected load row, a one-click **Reset** to the factory
+  beam, intentional unsolved-diagram placeholders, result-card order led by the
+  meaningful reactions (the trivial zero H reaction reads last, labelled "no horizontal
+  loads"), presets that open automatically for distributed loads, and true typographic
+  subscripts everywhere (`V_A`, `R_B`, `ΣM_A` render as real subscripts via
+  `<sub>`/`<tspan>` — semantic `_X` notation in the source, no glyph fallbacks). See
+  `plan-m12.md` §7 for the full record.
 - New teaching modules remain `src/glossary.js` (dictionary), `src/explain.js` (formatter
   over completed results) and `ui/popover.js` (reusable accessible dialog).
 - Roadmap after M11: future AI tutor layer; the current lab remains useful on its own.

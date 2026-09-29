@@ -45,7 +45,7 @@ import { initTheme } from './theme.js';
 import {
   state, EDGE_EPS, W_MAX, clamp, $, PRESETS, EI_PRESETS,
   selected, isSelectedDistributed, getSel, analyzeInput,
-  clampPoints, clampPointsFor, setLastSolve, isSelectedDeterminate,
+  clampPoints, clampPointsFor, setLastSolve, isSelectedDeterminate, resetState,
 } from './state.js';
 import { makeBeamDraggable } from './drag.js';
 import { initTeaching } from './teaching.js';
@@ -399,9 +399,24 @@ function syncSelectedControls() {
   const s = selected();
   const dist = s.type !== 'point';
   const isProfileShape = dist && s.points.length > 2;
+  // M12 Fix 1: state the selection → editor causal link explicitly, so the
+  // swapping controls read as "this editor follows the selected row" rather
+  // than "controls vanish". Pure readout — no new mode.
+  const note = $('editing-note');
+  if (note) {
+    const row = state.selectedLoad + 1;
+    note.textContent = dist
+      ? `Editing: Load ${row} — distributed (${s.points.length} shape points)`
+      : `Editing: Load ${row} — point load`;
+  }
+  // M12 Fix 4c: presets are the fastest path to a distributed shape, so the
+  // disclosure opens by default while a distributed load is selected.
+  const presets = $('ctl-presets');
+  const details = presets?.querySelector?.('details');
+  if (details) details.open = dist;
+  presets.hidden = !dist;
   $('ctl-load').hidden = dist;
   $('ctl-pos').hidden = dist;
-  $('ctl-presets').hidden = !dist;
   $('ctl-region-start').hidden = !dist || isProfileShape;
   $('ctl-region-end').hidden = !dist || isProfileShape;
   $('ctl-w1').hidden = !dist || isProfileShape;
@@ -427,6 +442,18 @@ function syncSelectedControls() {
 function bindLoadListButtons() {
   $('btn-add-point').addEventListener('click', () => addLoad('point'));
   $('btn-add-distributed').addEventListener('click', () => addLoad('distributed'));
+  // M12 Fix 5: one click back to the factory teaching default. No confirm —
+  // everything is re-derivable; the load list and editor re-sync from state.
+  const reset = $('btn-reset');
+  if (reset) reset.addEventListener('click', () => {
+    resetState();
+    syncSpanControls(); // span inputs are boot-bound; reset must refresh them
+    syncSupportSelects(); // same for the support selects
+    syncSelectedControls();
+    rebuildLoadList();
+    solveAndRender();
+    announce('Beam reset — 6 m span, one 10 kN point load at midspan, pin + roller');
+  });
 }
 
 // --- presets ----------------------------------------------------------------
@@ -507,6 +534,13 @@ function populateSupportSelects() {
     );
     sel.value = state.supports[side];
     sel.addEventListener('change', (evt) => setSupport(side, evt.target.value));
+  }
+}
+
+/** Mirror state.supports into the selects (boot + reset; change events set one side). */
+function syncSupportSelects() {
+  for (const [id, side] of [['sel-support-left', 'left'], ['sel-support-right', 'right']]) {
+    $(id).value = state.supports[side];
   }
 }
 

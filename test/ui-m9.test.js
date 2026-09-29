@@ -34,8 +34,10 @@ test('solved result cards retain labels and expose their own teaching routes', (
   const { doc, result } = boot({ span: 6, loads: [{ type: 'point', magnitude: 10, position: 3 }], supports: pinRoller });
   const cards = doc.getElementById('result-cards').children;
   const labels = cards.map((card) => card.children.find((node) => node.className === 'card-label').textContent);
-  assert.deepEqual(labels, ['Reaction H₍A₎', 'Reaction V₍A₎', 'Reaction V₍B₎', 'Max bending moment', 'Max deflection']);
-  assert.deepEqual(cards.map((card) => card.getAttribute('data-steps')), ['Reaction HA', 'Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection']);
+  // M12 Fix 7: labels carry semantic `_X` runs; the renderer turns them into
+  // true subscripts, and textContent reads the plain semantic form.
+  assert.deepEqual(labels, ['Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection', 'Reaction HA']);
+  assert.deepEqual(cards.map((card) => card.getAttribute('data-steps')), ['Reaction VA', 'Reaction VB', 'Max bending moment', 'Max deflection', 'Reaction HA']);
   assert.ok(cards.every((card) => card.getAttribute('tabindex') === '0' && card.getAttribute('role') === 'button'));
   assert.equal(result.reactions.left.Hx, 0);
 });

@@ -15,13 +15,42 @@
 import { DEFAULT_EI } from '../src/analysis.js';
 import { emitDescriptor } from '../src/loadmodel.js';
 
-export const state = {
+/**
+ * The factory teaching default (M12): one 10 kN point load at midspan on a
+ * 6 m pin+roller beam at the default stiffness. SINGLE SOURCE for both the
+ * boot state and the Reset control — reset deep-copies this so neither can
+ * drift from the other. Frozen: never mutate it (resetState copies).
+ */
+export const DEFAULT_STATE = Object.freeze({
   span: 6,
-  loads: [{ type: 'point', magnitude: 10, position: 3 }],
-  selectedLoad: 0,             // index into state.loads
-  supports: { left: 'pin', right: 'roller' },
+  loads: [Object.freeze({ type: 'point', magnitude: 10, position: 3 })],
+  selectedLoad: 0,
+  supports: Object.freeze({ left: 'pin', right: 'roller' }),
   EI: DEFAULT_EI,              // beam stiffness, kN·m² (M8)
-};
+});
+
+/** Deep-copy a plain state object (loads, points, supports are recreated). */
+function copyState(src) {
+  return {
+    span: src.span,
+    selectedLoad: src.selectedLoad,
+    EI: src.EI,
+    supports: { ...src.supports },
+    loads: src.loads.map((load) => load.points
+      ? { type: load.type, points: load.points.map((p) => ({ ...p })) }
+      : { type: load.type, magnitude: load.magnitude, position: load.position }),
+  };
+}
+
+export const state = copyState(DEFAULT_STATE);
+
+/**
+ * Reset the live state to the factory default IN PLACE (M12 Fix 5). Callers
+ * re-sync every control and re-solve afterwards. Returns nothing.
+ */
+export function resetState() {
+  Object.assign(state, copyState(DEFAULT_STATE));
+}
 
 export const EDGE_EPS = 1e-3; // min gap so a region keeps a non-zero width
 export const W_MAX = 50;      // kN/m editor cap (matches the w₁/w₂ inputs' max)

@@ -151,7 +151,7 @@ export function classifySupports(left, right) {
     note:
       `${unknowns} reaction unknowns against ${EQUILIBRIUM_EQUATIONS} equations — ` +
       `${degree} redundant (statically indeterminate). Solving needs the ` +
-      `compatibility / force method (deflection), which is outside this milestone.`,
+      `compatibility / force method (deflection), which is beyond this tool.`,
     unconstrained: [],
   };
 }

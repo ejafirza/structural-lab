@@ -93,7 +93,7 @@ test('UDL cantilever: hogging Mmax above the axis, sign labeled', () => {
 
   const values = cardValues(doc);
   assert.ok(values.includes('12 kN'), 'VA = wL = 12 kN');
-  assert.equal(values.filter((v) => v === '36 kN·m').length, 2, 'M₍A₎ and Mₘₐₓ both 36 kN·m');
+  assert.equal(values.filter((v) => v === '36 kN·m').length, 2, 'M_A and Mₘₐₓ both 36 kN·m');
   assert.ok(cardSubs(doc).some((t) => t.includes('hogging')), 'Mmax labeled hogging');
 
   assert.ok(bmdPeakY(doc) < bmdAxisY(doc), 'UDL hogging peak above the axis');

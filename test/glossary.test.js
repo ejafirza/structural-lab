@@ -67,10 +67,12 @@ test('every entry has a term and a body within sane teaching sizes', () => {
 
 test('engineering notation in glossary entries uses normalized visible symbols and units', () => {
   const text = GLOSSARY_KEYS.map((key) => `${getTerm(key).term} ${getTerm(key).body}`).join(' ');
-  for (const legacy of ['ΣFx', 'ΣFy', 'ΣM_A', 'V_A', 'V_B', 'Vmax', 'Mmax', 'vmax', 'Vwall', 'Mwall', 'kNm', 'EI·']) {
+  // M12 Fix 7: `_X` is the SEMANTIC form (rendered as true <sub> subscripts);
+  // the banned legacy forms are the old glyph fallbacks and unitless mistakes.
+  for (const legacy of ['ΣFx', 'ΣFy', 'V₍A₎', 'V₍B₎', 'V₍wall₎', 'M₍wall₎', 'ΣM₍', 'Vmax', 'Mmax', 'vmax', 'Vwall', 'Mwall', 'kNm', 'EI·']) {
     assert.ok(!text.includes(legacy), `legacy notation remains: ${legacy}`);
   }
-  for (const symbol of ['ΣFₓ', 'ΣFᵧ', 'V₍A₎', 'V₍B₎', 'Vₘₐₓ', 'Mₘₐₓ', 'E·I·v″', 'kN·m']) {
+  for (const symbol of ['ΣFₓ', 'ΣFᵧ', 'V_A', 'V_B', 'Vₘₐₓ', 'Mₘₐₓ', 'E·I·v″', 'kN·m']) {
     assert.ok(text.includes(symbol), `expected normalized notation: ${symbol}`);
   }
 });

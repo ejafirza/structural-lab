@@ -143,7 +143,7 @@ const BASE_IDS = [
   'ctl-w1', 'ctl-w2', 'ctl-points', 'point-count', 'point-table', 'btn-add-cp', 'num-load', 'slider-load',
   'num-pos', 'num-region-start', 'slider-region-start', 'num-region-end', 'slider-region-end', 'num-w1',
   'slider-w1', 'num-w2', 'slider-w2', 'num-span', 'slider-span', 'load-status', 'preset-chips',
-  'load-list', 'load-count', 'btn-add-point', 'btn-add-distributed', 'sel-support-left', 'sel-support-right',
+  'load-list', 'load-count', 'btn-add-point', 'btn-add-distributed', 'btn-reset', 'editing-note', 'sel-support-left', 'sel-support-right',
   'ctl-ei', 'num-ei', 'slider-ei', 'ei-chips', 'model-panel', 'beam-context-menu', 'beam-context-title',
   'beam-context-point', 'beam-context-distributed', 'lab-content',
 ];
@@ -207,6 +207,11 @@ export function makeDoc({ extraIds = [] } = {}) {
 let appBoot = 0;
 
 export async function bootApp({ desktop = true, extraIds = [] } = {}) {
+  // state.js is a module singleton (its specifier carries no query, unlike
+  // app.js), so the state object is shared across boots. Reset it to the
+  // factory default so every test starts from the same beam.
+  const stateModule = await import('../../ui/state.js');
+  stateModule.resetState();
   const { doc, elements } = makeDoc({ extraIds });
   let isDesktop = desktop;
   globalThis.document = doc;

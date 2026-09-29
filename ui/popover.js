@@ -88,7 +88,8 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
     }
     if (!internal) lastTrigger = trigger;
     const { title, body, close, back } = view._els;
-    title.textContent = titleText;
+    title.textContent = ''; // clear any previous topic before rich-append
+    appendNotation(title, titleText);
     back.hidden = glossaryTrail.length < 2;
     body.replaceChildren();
     renderBody(body);
@@ -143,13 +144,13 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
     const linkedKeys = new Set();
     let cursor = 0;
     for (const match of text.matchAll(pattern)) {
-      if (match.index > cursor) container.append(doc.createTextNode(text.slice(cursor, match.index)));
+      if (match.index > cursor) appendNotation(container, text.slice(cursor, match.index));
       const key = match[1];
       if (appendTopicLink(container, key, match[2])) linkedKeys.add(key);
-      else container.append(doc.createTextNode(match[0]));
+      else appendNotation(container, match[0]);
       cursor = match.index + match[0].length;
     }
-    if (cursor < text.length) container.append(doc.createTextNode(text.slice(cursor)));
+    if (cursor < text.length) appendNotation(container, text.slice(cursor));
     return linkedKeys;
   }
 
@@ -172,6 +173,24 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
       if (node.getAttribute?.('data-topic-key')) return node;
     }
     return null;
+  }
+
+  /**
+   * M12 Fix 7: rich-text notation. Semantic `_X` runs (V_A, ΣM_A, R_B)
+   * render as true <sub> subscripts in the dialog; textContent still reads
+   * as the plain semantic form, so text-based assertions hold.
+   */
+  function appendNotation(node, str) {
+    const parts = String(str).split(/(_[A-Za-z][A-Za-z0-9]*)/g).filter((p) => p !== '');
+    for (const part of parts) {
+      if (part.startsWith('_')) {
+        const sub = doc.createElement('sub');
+        sub.textContent = part.slice(1);
+        node.append(sub);
+      } else {
+        node.append(doc.createTextNode(part));
+      }
+    }
   }
 
   function formatValue(value) {
@@ -214,7 +233,7 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
 
         const heading = doc.createElement('h3');
         heading.className = 'worked-step-title';
-        heading.textContent = item.title;
+        appendNotation(heading, item.title);
         row.append(heading);
 
         if (item.explanation) {
@@ -227,13 +246,13 @@ export function initTeachingPopover(doc, { getGlossary, getSteps }) {
           const equation = doc.createElement('div');
           equation.className = 'worked-equation';
           equation.setAttribute('role', 'math');
-          equation.textContent = item.equation;
+          appendNotation(equation, item.equation);
           row.append(equation);
         }
         if (item.substitution) {
           const substitution = doc.createElement('p');
           substitution.className = 'worked-substitution';
-          substitution.textContent = item.substitution;
+          appendNotation(substitution, item.substitution);
           row.append(substitution);
         }
         if (item.value != null) {
