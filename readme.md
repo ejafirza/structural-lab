@@ -14,6 +14,15 @@ civil/structural engineering students, built around the loop
 |---|---|---|
 | ![Point load with draggable arrow, live SFD/BMD](docs/screenshot-point.png) | ![Distributed load with resultant R and centroid x̄ on the beam](docs/screenshot-udl.png) | ![Triangular load, analytic peak moment](docs/screenshot-triangular.png) |
 
+## What is this?
+
+Structural Lab is a free, browser-based tool for learning structural analysis:
+place loads and supports on a beam and watch the shear-force, bending-moment and
+deflected-shape diagrams respond live, with a built-in teaching layer that
+explains where every number comes from. Everything runs locally — zero
+dependencies, no install, no account — so you can clone it and experiment
+immediately.
+
 ## Status
 
 - **Milestone 1 — complete**: deterministic engine (simply supported beam, one
@@ -59,12 +68,12 @@ civil/structural engineering students, built around the loop
     outside the first and last point, and a repeated `x` is a **vertical
     step** (intensity jump).
   - Resultant by **per-segment summation** of the M5 closed forms
-    (`R = ΣRᵢ`, `x̄ = ΣRᵢx̄ᵢ/R`); kernels reuse the M6 two-function contract;
-    the peak search is M6's segment-exact `V = 0` machinery fed more events.
+    (`R = ΣRᵢ`, `x̄ = ΣRᵢx̄ᵢ/R`); each segment reuses the earlier closed-form
+    results; the peak search is M6's segment-exact `V = 0` machinery fed more events.
     Every integral exact — no numerics, no new dependencies.
-  - **Emit rule (the frozen boundary):** a two-point load emits the M5
-    `linear` descriptor byte-for-byte; only 3+ points (or a step) emit
-    `profile`. Every M5/M6 screen, label and number stays identical.
+  - **Backward compatibility:** a two-point distributed load keeps the earlier,
+    simpler load format exactly; only 3+ points (or a step) use the richer
+    `profile` format. Every earlier screen, label and number stays identical.
   - UI: a **shape-point table** (`x | w` rows, + Add point, per-row remove)
     edits 3+-point loads; two-point loads keep the flat M5 editor. One drag
     handle per control point (along the beam **and** up/down); two new preset
@@ -88,22 +97,22 @@ civil/structural engineering students, built around the loop
   - Honesty unchanged: determinate beams only; indeterminate/unstable keep
     the placeholder and hide the E·I control.
 - **Milestone 10 — complete**: responsive app shell, foldable Model editor, System/Light/
-  Dark preference, and the equilibrium check beside Results. The M10 checkpoint was
-  committed and pushed separately; it changed no calculations.
+  Dark preference, and the equilibrium check beside Results. It changed no engineering
+  calculations.
 - **Milestone 11 — complete**: minimalist hierarchy and spacing,
   concise copy, optional preset disclosures, and a centered accessible one-topic teaching
   dialog with in-context glossary links and a Back trail. The dialog opens only on
   activation, inerts the whole page background, traps focus and restores focus/state on
   close. E·I stays visible for every determinate load kind. Full browser verification
   (2026-09-29) is recorded in `plan-m11.md` §7.
-- **Teaching layer (M9, refined after M11, M12 polish):** activate a marked term or info button to
+- **Teaching layer (M9, refined in M11–M12):** activate a marked term or info button to
   read its hand-written explanation; blue inline links open related definitions in the
-  same dialog, with Back through the exploration trail. Result cards still open worked
-  explanations (marked with a quiet "How?" cue, M12). Standard cases show valid equations
+  same dialog, with Back through the exploration trail. Result cards open worked
+  explanations, each marked with a small "How?" cue. Standard cases show valid equations
   and substitutions. Mixed/profile cases show actual inputs and method, with engine
   outputs kept distinct from the method—no fabricated intermediate values. Unsolved
   beams explain why without inventing results, and every empty diagram panel routes to
-  that explanation (M12).
+  that explanation.
 - **M12 student-empathy pass (29 Sep 2026):** an editor identity note ("Editing: Load N
   — kind") that follows the selected load row, a one-click **Reset** to the factory
   beam, intentional unsolved-diagram placeholders, result-card order led by the
@@ -118,24 +127,8 @@ civil/structural engineering students, built around the loop
   note, Reset, intentional unsolved states, discoverable derivation doors, meaningful
   card order, auto-opening presets, and true typographic subscripts. See `plan-m12.md`.
 - Roadmap: the lab is complete and useful on its own. Parked ideas (not scheduled): an
-  optional LLM tutor over the existing grounding contract; influence lines;
-  1°-indeterminate beams via moment distribution.
-
-## Application shell (M10)
-
-- The **beam is the first, full-width workspace**: drag a load and watch the beam and
-  diagrams respond. Results follow it, then the folded Model editor for deeper edits.
-- On smaller screens these areas stack in the same beam → results → model order. The
-  Model disclosure keeps advanced controls available without competing with the first
-  experiment.
-- The Model editor can be folded and reopened without resetting any inputs. Its heading
-  shows the current load count. The equilibrium self-check now sits with Results.
-- The appearance button cycles **System → Light → Dark** and remembers only this visual
-  preference. System follows the device setting; theme storage is optional, so blocked
-  browser storage does not prevent the lab from working.
-- Labels were shortened only where they repeated information. Units, sign conventions,
-  true deflection values, result names, explanations and the educational disclaimer
-  remain available. M10 changed no engineering calculations.
+  optional LLM tutor layered on top of the engine-grounded explanations; influence
+  lines; 1°-indeterminate beams via moment distribution.
 
 ## Quick start
 
@@ -193,6 +186,22 @@ Educational tool — **not** a professional design-verification system.
   on the diagram rather than as separate result cards.
 - Indeterminate / unstable cases explain *why* instead of fabricating numbers.
 
+## Application shell
+
+- The **beam is the first, full-width workspace**: drag a load and watch the beam and
+  diagrams respond. Results follow it, then the folded Model editor for deeper edits.
+- On smaller screens these areas stack in the same beam → results → model order. The
+  Model disclosure keeps advanced controls available without competing with the first
+  experiment.
+- The Model editor can be folded and reopened without resetting any inputs. Its heading
+  shows the current load count. The equilibrium self-check now sits with Results.
+- The appearance button cycles **System → Light → Dark** and remembers only this visual
+  preference. System follows the device setting; theme storage is optional, so blocked
+  browser storage does not prevent the lab from working.
+- Labels were shortened only where they repeated information. Units, sign conventions,
+  true deflection values, result names, explanations and the educational disclaimer
+  remain available. The M10 shell redesign changed no engineering calculations.
+
 ## Architecture
 
 ```
@@ -214,11 +223,8 @@ ui/state.js          the single UI state object + pure state logic (accessors,
                      invariant repairs, last-solved result store) — DOM-free
 ui/drag.js           beam pointer/keyboard drag wiring + desktop context menu
                      (guarded by test/interaction-guard.test.js; actions injected by app.js)
-ui/teaching.js       M9 teaching-layer bootstrap (reads the last result from state.js)
-ui/theme.js          M10 System / Light / Dark preference (presentation only)
-ui/state.js          the single UI state object + pure state logic (M12 refactor)
-ui/drag.js           beam pointer/keyboard drag wiring + context menu (M12 refactor)
 ui/teaching.js       teaching-layer bootstrap (reads the last result from state.js)
+ui/theme.js          M10 System / Light / Dark preference (presentation only)
 ui/popover.js        M11 centered one-topic dialog (a11y, inert background, focus lifecycle)
 ui/render.js         M2 reference renderers (simply supported point load) — FROZEN
 ui/renderm3.js       support/load renderers (multi-load M6, profile M7, deflection M8,
@@ -250,12 +256,13 @@ test/theme.test.js         M10 appearance preference behavior (6)
 test/ui-m10.test.js        M10 shell, content and frozen-boundary contracts (7)
 test/helpers/              shared fake-DOM test harness (FakeNode, makeDoc, bootApp)
 docs/                original owner briefs (v1 product brief + M2 UI brief)
-verify/              browser-level CDP verification harnesses (see verify/readme.md)
+verify/              browser-level verification harnesses via the Chrome DevTools
+                     Protocol (see verify/readme.md)
 plan-m4.md … plan-m12.md milestone plans (the plan-before-code record)
 ```
 
 > **Filename-casing note:** on-disk filenames and ES-module import specifiers
-> are all lowercase (normalized 18 Sep 2026), so the project runs unchanged on
+> are all lowercase, so the project runs unchanged on
 > case-sensitive filesystems (Linux, GitHub Pages, CI containers).
 
 ### Data flow (strictly one-way)
@@ -386,11 +393,11 @@ For 2D statics (3 equilibrium equations), with reaction unknowns `R`:
   engine results except the m → mm conversion; no invented intermediate numbers,
   honest unsolved states and no result mutation); one-topic modal behavior (activation
   only, keyboard operation, focus/inert restoration, no innerHTML, fail-soft unknowns).
-- **Browser-level verification** (headless Edge via CDP): prior milestone totals are
-  listed in `verify/readme.md`. M11's combined one-Edge run passed 46/46 product checks
-  with no console errors; its separate profile-cleanup assertion failed once with
-  `EBUSY`. Cleanup retries were added but not browser-rerun. M5–M10 browser regressions
-  remain pending; `verify/tmp/` is currently empty.
+- **Browser-level verification** (headless Edge): prior milestone totals are listed
+  in `verify/readme.md`. The full M5–M12 regression matrix passed serially on
+  2026-09-29: teaching 51/51 (including the M12 checks), shell 22/22, M5 32/32,
+  M6 22/22, M7 30/30, M8 15/15, and all five layout audits clean — with no browser
+  console or runtime errors.
 
 ## Educational disclaimer
 
