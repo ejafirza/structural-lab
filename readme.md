@@ -4,9 +4,11 @@ Interactive Structural Analysis Learning Laboratory — educational software for
 civil/structural engineering students, built around the loop
 **Experiment → Observe → Question → Understand**.
 
-> **The engineering engine calculates. AI explains.** Deterministic mathematics
-> produces every structural result; the AI tutor layer (a future milestone) will
-> only ever interpret and explain those results — never compute them.
+> **The engineering engine calculates. The teaching layer explains.** Deterministic
+> mathematics produces every structural result; the hand-written teaching layer
+> (glossary + worked derivations) interprets and explains those results — never
+> computes them. (An optional LLM tutor remains a parked idea: the deterministic
+> layer already fulfils the explaining role, offline and for free.)
 
 | Point load | Full-span UDL | Triangular load |
 |---|---|---|
@@ -67,8 +69,8 @@ civil/structural engineering students, built around the loop
     edits 3+-point loads; two-point loads keep the flat M5 editor. One drag
     handle per control point (along the beam **and** up/down); two new preset
     chips (**Stepped**, **Snow drift ▲**); point cap 6.
-- Roadmap after M7: deflection / E·I (elastic curve) → UI consolidation pass →
-  AI tutor layer.
+- Roadmap after M7: deflection / E·I (elastic curve) → UI consolidation →
+  teaching dialog refinement → student-empathy pass (all complete, M8–M12).
 - **Milestone 8 — complete**: **deflection / elastic curve (E·I)**.
   - A fourth diagram panel draws the beam's **deflected shape** (exaggerated,
     with the factor and the true scale printed), plus a **Max deflection**
@@ -112,7 +114,12 @@ civil/structural engineering students, built around the loop
   `plan-m12.md` §7 for the full record.
 - New teaching modules remain `src/glossary.js` (dictionary), `src/explain.js` (formatter
   over completed results) and `ui/popover.js` (reusable accessible dialog).
-- Roadmap after M11: future AI tutor layer; the current lab remains useful on its own.
+- **Milestone 12 — complete**: student-empathy pass (29 Sep 2026) — editor identity
+  note, Reset, intentional unsolved states, discoverable derivation doors, meaningful
+  card order, auto-opening presets, and true typographic subscripts. See `plan-m12.md`.
+- Roadmap: the lab is complete and useful on its own. Parked ideas (not scheduled): an
+  optional LLM tutor over the existing grounding contract; influence lines;
+  1°-indeterminate beams via moment distribution.
 
 ## Application shell (M10)
 
@@ -146,11 +153,11 @@ npm run demo   # ASCII text demo of the engine (Milestone 1)
 **Testing & quality:** Node's built-in test suite (`npm test`) covers analytical cases
 with independently known textbook values, rendering, accessible teaching, shell/theme
 checks, and source guards proving the UI contains no engineering formulas. The browser suite in [`verify/`](verify/readme.md) covers controls, calculations, dialogs,
-themes and responsive layouts. The complete M5–M11 browser regression matrix passed serially on 2026-09-29: all
-functional and layout assertions passed — M11 teaching 47/47, M10 shell 22/22, M5 consolidation
+themes and responsive layouts. The complete M5–M12 browser regression matrix passed serially on 2026-09-29: all
+functional and layout assertions passed — M11 teaching 51/51 (with the M12 checks), M10 shell 22/22, M5 consolidation
 32/32, M6 multi-load 22/22, M7 profile 30/30, M8 deflection 15/15, and all five layout audits
 clean (27 shell checks, 6/6, 6/6, 8/8, 8/8) — with no browser console/runtime errors and
-`verify/tmp/` empty after the run. The unit suite stood at 188/188 in the same state.
+`verify/tmp/` empty after the run. The unit suite stands at 191/191 in the same state.
 CI runs the unit suite on Node 20 and 22 against a case-sensitive filesystem.
 Educational tool — **not** a professional design-verification system.
 
@@ -209,6 +216,9 @@ ui/drag.js           beam pointer/keyboard drag wiring + desktop context menu
                      (guarded by test/interaction-guard.test.js; actions injected by app.js)
 ui/teaching.js       M9 teaching-layer bootstrap (reads the last result from state.js)
 ui/theme.js          M10 System / Light / Dark preference (presentation only)
+ui/state.js          the single UI state object + pure state logic (M12 refactor)
+ui/drag.js           beam pointer/keyboard drag wiring + context menu (M12 refactor)
+ui/teaching.js       teaching-layer bootstrap (reads the last result from state.js)
 ui/popover.js        M11 centered one-topic dialog (a11y, inert background, focus lifecycle)
 ui/render.js         M2 reference renderers (simply supported point load) — FROZEN
 ui/renderm3.js       support/load renderers (multi-load M6, profile M7, deflection M8,
@@ -232,15 +242,16 @@ test/interaction-guard.test.js  M6.5 drag-wiring source guard (3; extended for M
 test/profile.test.js       M7 profile solver — Cases A–G (20)
 test/ui-m7.test.js         M7 render + emit rule + point-table interaction (5)
 test/deflection.test.js    M8 elastic curve — Cases A–L (12)
-test/ui-m8.test.js         M8 deflection panel + E·I wiring (4)
+test/ui-m8.test.js         M8 deflection/E·I wiring + M12 reset & editor identity (9)
 test/glossary.test.js      M9 teaching-dictionary integrity (6)
 test/explain.test.js       M11 derivation identity + honesty (9)
-test/ui-m9.test.js         M11 card routing + one-topic modal behavior (7)
+test/ui-m9.test.js         M11 card routing + one-topic modal behavior (11)
 test/theme.test.js         M10 appearance preference behavior (6)
 test/ui-m10.test.js        M10 shell, content and frozen-boundary contracts (7)
+test/helpers/              shared fake-DOM test harness (FakeNode, makeDoc, bootApp)
 docs/                original owner briefs (v1 product brief + M2 UI brief)
 verify/              browser-level CDP verification harnesses (see verify/readme.md)
-plan-m4.md … plan-m11.md milestone plans (the plan-before-code record)
+plan-m4.md … plan-m12.md milestone plans (the plan-before-code record)
 ```
 
 > **Filename-casing note:** on-disk filenames and ES-module import specifiers
