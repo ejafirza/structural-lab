@@ -275,7 +275,14 @@ function rebuildLoadList() {
     pick.type = 'button';
     pick.className = i === state.selectedLoad ? 'active' : '';
     pick.setAttribute('aria-pressed', i === state.selectedLoad ? 'true' : 'false');
-    pick.innerHTML = `<span class="load-badge" aria-hidden="true">${i + 1}</span><span class="load-summary">${loadSummary(load)}</span>`;
+    const badge = document.createElement('span');
+    badge.className = 'load-badge';
+    badge.setAttribute('aria-hidden', 'true');
+    badge.textContent = String(i + 1);
+    const summary = document.createElement('span');
+    summary.className = 'load-summary';
+    summary.textContent = loadSummary(load);
+    pick.append(badge, summary);
     pick.setAttribute('aria-label', loadAriaLabel(load, i, n));
     pick.addEventListener('click', () => selectLoad(i));
 

@@ -157,7 +157,12 @@ function txt(x, y, str, o = {}) {
   if (o.weight) attrs['font-weight'] = o.weight;
   if (o.italic) attrs['font-style'] = 'italic';
   if (o.halo) {
-    attrs.style = `paint-order:stroke;stroke:${C.halo};stroke-width:3.5px;stroke-linejoin:round`;
+    // SVG presentation attributes work with the app's strict style-src CSP;
+    // an inline style attribute is blocked when the browser enforces that CSP.
+    attrs['paint-order'] = 'stroke';
+    attrs.stroke = C.halo;
+    attrs['stroke-width'] = '3.5px';
+    attrs['stroke-linejoin'] = 'round';
   }
   // M9: any other option (e.g. 'data-term') passes through onto the text
   // node — the teaching layer annotates existing labels without touching

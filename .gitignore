@@ -1,4 +1,4 @@
-# Verification harness litter (throwaway browser profiles, ports) — stays local
+# Verification and security test litter (throwaway browser profiles, ports, fixtures) — stays local
 verify/tmp/
 
 # In case someone runs npm install despite the zero-dependency policy
@@ -8,3 +8,21 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.log
+
+# Local credentials and private overrides
+.env
+.env.*
+!.env.example
+
+# Architect-only working notes and verification runbooks; keep local, not in the project repo
+/AGENTS.md
+/dashboard.md
+/handoff.md
+/Tier 2 Dashboard Spec.md
+/plan-m*.md
+/docs/brief-*.md
+/docs/developer.md
+/docs/security-audit.md
+/verify/readme.md
+/test/helpers/readme.md
+/structural-lab-overview.html

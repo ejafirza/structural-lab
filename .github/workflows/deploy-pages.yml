@@ -1,13 +1,11 @@
 # Deploy the live demo to GitHub Pages.
 #
-# The app is pure static files + ES modules with zero dependencies — no build
-# step exists by design. The "build" is a copy: ui/* at the artifact root,
-# src/ beside it, which is exactly how the relative imports in ui/*.js
-# (`../src/analysis.js`, `./state.js`, …) resolve on any static host.
+# The app is pure static files + ES modules with zero dependencies. Stage the
+# project folders unchanged: ui/app.js imports ../src/analysis.js, so flattening
+# ui/ would break those imports. The root index sends visitors to ./ui/.
 #
 # One-time setup (repo owner): Settings → Pages → Build and deployment →
-# Source: "GitHub Actions". Until then this workflow's deploy step will
-# report a pages-build-deployment environment that does not exist yet.
+# Source: "GitHub Actions" before the first deployment can succeed.
 name: Deploy demo to GitHub Pages
 
 on:
@@ -31,25 +29,26 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       # Guard: run the unit suite before publishing anything.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - run: node --test
 
-      - name: Stage site (ui/ at root, src/ beside it)
+      - name: Stage site (preserve ui/ and src/ paths)
         run: |
           mkdir -p site
-          cp -r ui/* site/
+          cp -r ui site/ui
           cp -r src site/src
+          cp index.html site/index.html
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: site
 
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

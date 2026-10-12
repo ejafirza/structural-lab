@@ -2,12 +2,11 @@
   "name": "structural-lab",
   "version": "0.1.0",
   "private": true,
-  "description": "Interactive Structural Analysis Learning Laboratory - deterministic engine + interactive SFD/BMD beam lab (Milestones 1-6)",
+  "description": "Interactive beam-analysis learning lab for exploring loads, supports, and structural behavior",
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test",
-    "demo": "node src/demo.js"
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18"

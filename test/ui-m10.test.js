@@ -99,6 +99,8 @@ test('live SVG palette references CSS theme tokens; frozen M1 renderer remains u
   const reference = read('../ui/render.js');
   assert.ok(renderer.includes('var(--diagram-ink'));
   assert.ok(renderer.includes('var(--diagram-halo'));
+  assert.ok(renderer.includes("attrs['paint-order'] = 'stroke'"), 'text halos use SVG presentation attributes compatible with strict CSP');
+  assert.ok(!renderer.includes('attrs.style ='), 'SVG labels do not use CSP-blocked inline style attributes');
   assert.ok(css.includes('--diagram-halo: #1f2937'));
   assert.ok(css.includes('--diagram-shear: #60a5fa'));
   assert.match(reference, /const C = \{[\s\S]*ink: '#1e293b'/, 'legacy renderer retains its original fixed palette');
