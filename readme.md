@@ -4,11 +4,9 @@
 
 **An interactive beam lab for learning structural analysis.** Change the loads or supports and see the beam’s reactions, shear force, bending moment, and deflected shape respond.
 
-> **Hosted demo setup is pending.** This repository has a GitHub Pages workflow; follow the setup steps below before sharing an online demo link.
-
 ## Try the lab
 
-Once published, the browser demo opens with a 6 m span and a 10 kN load in the middle. It needs no account, download, or setup. The lab works in three steps; use **Back** and **Next**, or the step bar at the top, to move between them.
+The browser demo opens with a 6 m span and a 10 kN load in the middle. It needs no account, download, or setup. The lab works in three steps; use **Back** and **Next**, or the step bar at the top, to move between them.
 
 1. **Beam:** look at the beam, its supports, and the span.
 2. **Loads:** drag the load arrow along the beam, click a support to change its type, and open **Model** to add a point or distributed load. Try a **Snow drift** preset.
