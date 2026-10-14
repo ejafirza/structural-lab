@@ -5,7 +5,7 @@
  * MECHANICS (never its wording): no dead links, no orphans, sane sizes,
  * every declared relationship resolves to a dictionary entry and is rendered
  * as the source for in-dialog navigation.
- * The ≤ 8 SVG touchpoint budget from plan-m9.md is asserted exactly.
+ * The ≤ 8 SVG touchpoint budget is asserted exactly.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

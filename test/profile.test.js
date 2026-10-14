@@ -1,8 +1,7 @@
 /**
  * profile.test.js — Analytical tests for arbitrary w(x) profiles (Milestone 7).
  * ---------------------------------------------------------------------------
- * Every expected value below is textbook statics worked BY HAND (plan-m7.md
- * §8) — never an engine round-trip. The engine result is compared against
+ * Every expected value below is textbook statics worked BY HAND — never an engine round-trip. The engine result is compared against
  * these independent numbers.
  *
  * Cases:

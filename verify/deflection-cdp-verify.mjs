@@ -5,7 +5,7 @@
 // slider + preset chips) re-sags the beam live, cantilevers deflect at the
 // tip, honesty for indeterminate beams, and zero console errors.
 //
-// Hand-derived anchors (plan-m8.md §8): L = 6, EI = 2.0e4 kN·m².
+// Hand-derived anchors: L = 6, EI = 2.0e4 kN·m².
 //   default P = 10 @ 3 m:      EI·v = P·L³/48  = 45    → v = 2.25 mm
 //   full UDL w = 2:            EI·v = 5wL⁴/384 = 33.75 → v = 1.69 mm
 //   P = 10 @ 3 m, fixed+free:  EI·v = P·a²(3L−a)/6 = 225 → v = 11.3 mm

@@ -106,8 +106,7 @@ export function makeBeamDraggable(svg, {
       // pointermove/keyboard handlers apply. The SVG handle role is
       // 'load-handle'; its drag id is 'load' (M5 consolidation renamed the
       // attribute but not the mutation — the mismatch left the arrow
-      // un-draggable by mouse until the M6.5 repair; see plan-m6.5.md §1,
-      // and the vocabulary guard in test/interaction-guard.test.js).
+      // un-draggable by mouse until the M6.5 repair; see the vocabulary guard in test/interaction-guard.test.js).
       dragging = role === 'load-handle' ? 'load' : role;
       // Pin the CONTROL-POINT OBJECT, not its index: clampPoints() may
       // re-sort the array mid-drag (a step dragged past its partner), and an

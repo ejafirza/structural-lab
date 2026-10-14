@@ -1,7 +1,7 @@
 /**
  * interaction-guard.test.js — static source guard for the beam-drag wiring (M6.5).
  * ---------------------------------------------------------------------------
- * The M6.5 bug (plan-m6.5.md §1): the pointerdown handler accepted the SVG
+ * The M6.5 bug: the pointerdown handler accepted the SVG
  * attribute role `'load-handle'` while pointermove only acted on the drag id
  * `'load'` — the load arrow started a drag that did nothing, and NO presence
  * check could see it (handle-existence tests stayed green for two milestones).

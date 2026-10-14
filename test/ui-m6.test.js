@@ -42,7 +42,7 @@ const sfdTexts = (doc) =>
 
 const pinRoller = { left: 'pin', right: 'roller' };
 
-// Case A of plan-m6.md §8: point 10 kN at 2 + full UDL 2 kN/m, L = 6.
+// Case A: point 10 kN at 2 + full UDL 2 kN/m, L = 6.
 const caseA = {
   span: 6,
   loads: [

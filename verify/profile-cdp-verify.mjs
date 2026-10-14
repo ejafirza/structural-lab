@@ -7,7 +7,7 @@
 // linear path), honesty for indeterminate beams with a profile, and zero
 // console errors.
 //
-// Hand-derived anchor (plan-m7.md §8, Case A): L = 6, profile
+// Hand-derived anchor (Case A): L = 6, profile
 // (0,4) (3,4) (3,8) (6,8) — 4 kN/m on [0,3] then 8 kN/m on [3,6]:
 //   R = 36 kN, x̄ = 3.5 m, RA = 15 kN, RB = 21 kN,
 //   x* = 27/8 = 3.375 m, Mmax = 441/16 ≈ 27.5625 → "27.6 kNm".

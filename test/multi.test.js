@@ -1,8 +1,7 @@
 /**
  * Multi-load (combined) analysis tests — Milestone 6.
  *
- * Every expected value is an independently hand-derived statics result (see
- * plan-m6.md §8) — not an engine round-trip. Superposition of closed-form
+ * Every expected value is an independently hand-derived statics result — not an engine round-trip. Superposition of closed-form
  * kernels:
  *
  *   R  = ΣRᵢ,  x̄ = ΣRᵢx̄ᵢ / R
@@ -163,7 +162,7 @@ test('C: point inside a distributed region — peak at the jump', () => {
 // ---------------------------------------------------------------------------
 // Case D — peak BETWEEN the loads (not at either). L=6, P=4 at x=1, w=3 full span.
 // RA=37/3, RB=29/3. V(1⁺)=16/3 → zero at x=1+16/9=25/9.
-// Mmax = 841/54 at x=25/9 (verified from both sides in plan-m6.md §8).
+// Mmax = 841/54 at x=25/9 (verified from both sides).
 // ---------------------------------------------------------------------------
 test('D: peak between the loads — analytic V=0 root inside the UDL', () => {
   const r = analyzeBeam({

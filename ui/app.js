@@ -29,7 +29,7 @@
  *   • the last remaining load cannot be removed (the list never empties);
  *   • the beam links back: clicking/dragging a load selects its row.
  *
- * THE EMIT RULE (plan-m7.md §4) — a distributed load's internal model is its
+ * THE EMIT RULE — a distributed load's internal model is its
  * control-point list; `emitDescriptor` (loadmodel.js, the single home) emits
  * it as `linear` when it has exactly two points with distinct x (the frozen
  * M5 descriptor, byte-for-byte) and as `profile` otherwise. Every M5/M6

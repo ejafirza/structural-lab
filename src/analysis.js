@@ -149,7 +149,7 @@ function computeResultant(load, span) {
     return { value: load.intensity * span, position: span / 2 };
   }
   if (load.type === 'profile') {
-    // Per-segment summation of the M5 trapezoid closed forms (plan-m7 §3):
+    // Per-segment summation of the M5 trapezoid closed forms:
     // a zero-width segment (a step pair) contributes nothing — correct, a
     // jump changes the shape, not the total.
     let R = 0;
@@ -750,7 +750,7 @@ function bisectRoot(thetaFn, a, b, fa) {
  *   dist (w1→w2 over [x1,x2]):
  *     inside: −[w1·s³/6 + (w2−w1)·s⁴/(24b)]      (s = x−x1, b = x2−x1)
  *     beyond: −[area·(x−x2) + ∫inside]           (area = (w1+w2)·b/2)
- * (Every antiderivative hand-verified against plan-m8 §8 Cases A/D/F.)
+ * (Every antiderivative hand-verified against the worked textbook cases A/D/F.)
  */
 function momentIntegralTerm(load, x) {
   if (load.type === 'point') {

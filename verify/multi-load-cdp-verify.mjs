@@ -3,7 +3,7 @@
 // resultant R/x̄ on the beam, list summaries, the MAX_LOADS cap, honesty for
 // indeterminate multi-load beams, and zero console errors.
 //
-// Expected values are hand-derived (plan-m6.md §8 discipline), e.g. the
+// Expected values are hand-derived, e.g. the
 // default point (10 kN @ 3 m) + added point (5 kN @ 4 m) on L = 6:
 //   RA = (10·3 + 5·2)/6 = 20/3 ≈ 6.67, RB = 25/3 ≈ 8.33,
 //   Mmax = RA·3 = 20 kNm at the x = 3 jump;  R = 15 kN, x̄ = (10·3 + 5·4)/15.
@@ -100,7 +100,7 @@ try {
   // M6.5 drag regression: synthesize a REAL pointer drag on a beam handle
   // (pointerdown on the handle, pointermove/pointerup on window — the
   // listeners live there) and report the handle's on-screen centre before
-  // and after. Guards the repaired bug (plan-m6.5.md §1): pointerdown
+  // and after. Guards the repaired bug: pointerdown
   // accepted the 'load-handle' role while pointermove only acted on 'load',
   // so handle-presence checks stayed green while the arrow never moved.
   const dragHandle = async (role, dxPx) => evalJs(`(() => {

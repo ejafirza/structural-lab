@@ -1,7 +1,7 @@
 /**
  * deflection.test.js — Analytical tests for the elastic curve (Milestone 8).
  * ---------------------------------------------------------------------------
- * Every expected value is textbook statics worked BY HAND (plan-m8.md §8) —
+ * Every expected value is textbook statics worked BY HAND —
  * never an engine round-trip. Cases:
  *   A  simply supported, P at midspan        EI·v_max = P·L³/48
  *   B  simply supported, P off-centre        interior turning point (θ = 0)

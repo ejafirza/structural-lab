@@ -170,5 +170,5 @@ test('UDL input validation', () => {
   assert.throws(() => analyzeBeam({ span: 6, loads: [{ type: 'udl', intensity: 2, start: 1, end: 5 }], supports: { left: 'pin', right: 'roller' } }), RangeError);
   assert.throws(() => analyzeBeam({ span: 6, loads: [{ type: 'moment', magnitude: 5 }], supports: { left: 'pin', right: 'roller' } }), TypeError);
   // (M6 note: the M5-era assertion that TWO udl loads throw was superseded —
-  // multi-load arrays are now valid; see plan-m6.md §4.)
+  // multi-load arrays are now valid.)
 });

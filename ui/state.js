@@ -62,7 +62,7 @@ export const $ = (id) => document.getElementById(id);
 // M5 presets are expressed as `region` fractions + [wStart, wEnd] and emit
 // `linear` (two points). The two M7 chips are expressed directly as a point
 // LIST [x-fraction, w] and emit `profile`. Chips fill data; they never
-// switch a mode (plan-m7.md §6).
+// switch a mode.
 export const PRESETS = [
   { id: 'full',      label: 'Full UDL',      hint: 'Uniform over the whole span',          region: [0, 1],      w: [2, 2] },
   { id: 'partial',   label: 'Partial UDL',   hint: 'Uniform over part of the span',        region: [1 / 6, 5 / 6], w: [2, 2] },
@@ -73,7 +73,7 @@ export const PRESETS = [
   { id: 'snowdrift', label: 'Snow drift ▲',  hint: 'Ramp up, plateau, taper down',                points: [[0, 0], [0.25, 6], [0.5, 6], [0.75, 3], [1, 3]] },
 ];
 
-// Teaching presets (plan-m8 §2): round values, not catalogue sections.
+// Teaching presets: round values, not catalogue sections.
 export const EI_PRESETS = [
   { id: 'steel',    label: 'Steel beam ≈ 1.8×10⁴', value: 1.8e4, hint: 'Typical steel beam at educational scale' },
   { id: 'timber',   label: 'Timber joist ≈ 5×10²', value: 5e2,  hint: 'Typical timber joist — sags visibly more' },

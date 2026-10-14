@@ -20,7 +20,7 @@
  * control points (x, w): the intensity follows the polyline through them,
  * is zero outside the first and last point, and a repeated adjacent x is a
  * vertical step (an intensity jump). `linear` is exactly the two-point,
- * strictly-increasing-x case — a profile never replaces it (§11 of plan-m7.md).
+ * strictly-increasing-x case — a profile never replaces it.
  *
  * Milestone 6/7 accept ONE to MAX_LOADS loads (any mix of point / udl /
  * linear / profile descriptors, superposed for ≥ 2). No expression strings,
@@ -166,7 +166,7 @@ function normalizeDescriptor(d, span) {
 }
 
 /**
- * THE EMIT RULE (M7, plan-m7.md §4) — the single home. The UI's internal
+ * THE EMIT RULE (M7) — the single home. The UI's internal
  * model of a distributed load is its control-point list; this pure function
  * emits it as an engine descriptor:
  *   • exactly two points with distinct x → the FROZEN M5 `linear` descriptor
