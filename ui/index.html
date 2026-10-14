@@ -20,10 +20,17 @@
     </button>
   </header>
 
+  <nav class="steps" aria-label="Workflow steps">
+    <button type="button" class="step-link" data-step-target="beam"><span class="step-num" aria-hidden="true">1</span> Beam</button>
+    <button type="button" class="step-link" data-step-target="loads"><span class="step-num" aria-hidden="true">2</span> Loads</button>
+    <button type="button" class="step-link" data-step-target="results"><span class="step-num" aria-hidden="true">3</span> Results</button>
+    <span id="step-position" class="step-position" aria-live="polite"></span>
+  </nav>
+
   <p id="validation-msg" class="validation-msg" role="alert" hidden></p>
 
   <main class="lab" id="lab-content">
-    <section class="panel diagram-panel beam-panel" aria-label="Beam diagram">
+    <section class="panel diagram-panel beam-panel" id="beam-panel" data-steps="beam loads" aria-label="Beam diagram">
       <h2>Beam</h2>
       <p class="beam-cue">Click or tap a support symbol to cycle it. <span class="desktop-beam-cue">Right-click the beam to add a load. </span>Hold and drag a load to move it; use Model controls on touch.</p>
       <svg id="beam-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img" tabindex="-1"
@@ -35,7 +42,7 @@
       </div>
     </section>
 
-    <section class="panel readouts" aria-label="Engineering results">
+    <section class="panel readouts" id="results-panel" data-steps="results" aria-label="Engineering results">
       <h2>Results</h2>
       <div class="result-status">
         <div id="det-badge" class="det-badge" role="status" aria-live="polite" data-term="determinacy" tabindex="0">–</div>
@@ -45,7 +52,7 @@
       <div id="result-cards" class="cards"></div>
     </section>
 
-    <details id="model-panel" class="panel inputs model-disclosure" open aria-label="Model inputs">
+    <details id="model-panel" class="panel inputs model-disclosure" open data-steps="loads" aria-label="Model inputs">
       <summary class="model-summary">
         <span class="model-title" role="heading" aria-level="2">Model</span>
         <span id="load-count" class="model-count" aria-live="polite">1 load</span>
@@ -172,23 +179,28 @@
 
 
 
-    <section class="panel diagram-panel shear-panel" aria-label="Shear force diagram">
+    <section class="panel diagram-panel shear-panel" data-steps="results" aria-label="Shear force diagram">
       <h2><span data-term="shear-force" tabindex="0" role="button">Shear force V(x)</span> <span class="diagram-cue">kN · positive plots up</span></h2>
       <svg id="sfd-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img"
            aria-label="Shear force diagram"></svg>
     </section>
 
-    <section class="panel diagram-panel moment-panel" aria-label="Bending moment diagram">
+    <section class="panel diagram-panel moment-panel" data-steps="results" aria-label="Bending moment diagram">
       <h2><span data-term="bending-moment" tabindex="0" role="button">Bending moment M(x)</span> <span class="diagram-cue">kN·m · sagging (+) below, hogging (−) above</span></h2>
       <svg id="bmd-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img"
            aria-label="Bending moment diagram"></svg>
     </section>
 
-    <section class="panel diagram-panel deflection-panel" aria-label="Deflected shape">
+    <section class="panel diagram-panel deflection-panel" data-steps="results" aria-label="Deflected shape">
       <h2><span data-term="elastic-curve" tabindex="0" role="button">Deflected shape v(x)</span> <span class="diagram-cue">Shape exaggerated; true value shown</span></h2>
       <svg id="defl-svg" class="diagram" preserveAspectRatio="xMidYMid meet" role="img"
            aria-label="Deflected shape of the beam centreline (elastic curve), drawn exaggerated"></svg>
     </section>
+
+    <nav class="step-actions" aria-label="Step navigation">
+      <button type="button" id="step-prev" class="step-btn">← Back</button>
+      <button type="button" id="step-next" class="step-btn primary">Next →</button>
+    </nav>
 
     <footer class="foot">For learning only—not for structural design verification.</footer>
   </main>

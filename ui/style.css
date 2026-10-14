@@ -207,6 +207,89 @@ body {
   z-index: 10;
 }
 
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 22px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.step-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--header-control-line);
+  border-radius: 999px;
+  background: var(--header-control-bg);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.step-link:hover { border-color: var(--accent); }
+.step-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--active-control-bg);
+  color: var(--active-control-ink);
+  font-size: 11px;
+}
+
+/* Step buttons are real buttons: reset the browser look, keep the pill style. */
+.step-link { font: inherit; cursor: pointer; }
+.step-link[aria-current="step"] {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 2px var(--focus);
+}
+.step-link[aria-current="step"] .step-num { background: var(--focus); }
+
+.step-position {
+  margin-left: auto;
+  align-self: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Sections outside the current step are hidden (see ui/steps.js). */
+[data-steps][hidden] { display: none; }
+
+.step-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.step-btn {
+  min-height: 44px;
+  padding: 9px 18px;
+  border: 1px solid var(--header-control-line);
+  border-radius: 10px;
+  background: var(--header-control-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.step-btn.primary {
+  background: var(--active-control-bg);
+  border-color: var(--active-control-bg);
+  color: var(--active-control-ink);
+}
+.step-btn:hover:not(:disabled) { border-color: var(--accent); }
+.step-btn:disabled { opacity: 0.45; cursor: default; }
+.step-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
 .brand { display: flex; align-items: center; gap: 12px; }
 
 .brand-mark {

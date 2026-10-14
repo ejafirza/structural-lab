@@ -42,6 +42,7 @@ import { SUPPORTS, SUPPORT_TYPES } from '../src/supportmodel.js';
 import { renderM3 } from './renderm3.js';
 import { fmt } from './render.js';
 import { initTheme } from './theme.js';
+import { initSteps } from './steps.js';
 import {
   state, EDGE_EPS, W_MAX, clamp, $, PRESETS, EI_PRESETS,
   selected, isSelectedDistributed, getSel, analyzeInput,
@@ -737,6 +738,7 @@ bindPointsEditor();
 bindEI();
 syncSpanControls();
 initTheme(document);
+initSteps(document);
 initTeaching();
 syncSelectedControls();
 rebuildLoadList();

@@ -8,12 +8,11 @@
 
 ## Try the lab
 
-Once published, the browser demo opens with a 6 m span and a 10 kN load in the middle. It needs no account, download, or setup.
+Once published, the browser demo opens with a 6 m span and a 10 kN load in the middle. It needs no account, download, or setup. The lab works in three steps; use **Back** and **Next**, or the step bar at the top, to move between them.
 
-1. Drag the load arrow along the beam and watch the results and diagrams change.
-2. Click a support to try a different support type.
-3. Open **Model** to add a point or distributed load. Try a **Snow drift** preset.
-4. Choose **How?** on a result to see its worked calculation. Select **Reset** to start over.
+1. **Beam:** look at the beam, its supports, and the span.
+2. **Loads:** drag the load arrow along the beam, click a support to change its type, and open **Model** to add a point or distributed load. Try a **Snow drift** preset.
+3. **Results:** see the reactions and the shear force, bending moment, and deflected shape. Choose **How?** on a result to see its worked calculation. Select **Reset** to start over.
 
 | Point load | Distributed load | Triangular load |
 |---|---|---|
