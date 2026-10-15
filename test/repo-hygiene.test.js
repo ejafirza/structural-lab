@@ -51,8 +51,8 @@ test('the project root page is present for static hosting and links to the app',
 
 test('public documentation does not include architect-only plans or module inventories', () => {
   const readme = readFileSync(path.resolve('readme.md'), 'utf8');
-  assert.match(readme, /Hosted demo setup is pending/);
-  assert.doesNotMatch(readme, /https:\/\/ejafirza\.github\.io\/structural-lab\//);
+  assert.doesNotMatch(readme, /Hosted demo setup is pending/);
+  assert.match(readme, /https:\/\/ejafirza\.github\.io\/structural-lab\/ui\//);
   assert.match(readme, /educational/i);
   assert.doesNotMatch(readme, /src\/engine\.js|Architecture|plan-m\d+/i);
 });
