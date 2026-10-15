@@ -73,6 +73,11 @@ try {
     if (!ok) throw new Error('app page never became live');
   }
 
+  // Each state is captured on the guided step where it appears in the app:
+  // Loads (beam + Model) for the load editing states, Results for the diagrams.
+  await evalJs(`document.querySelector('[data-step-target=loads]').click()`);
+  await sleep(300);
+
   // 1. default point load (P=10 kN at a=3 m, pin+roller)
   await shot('screenshot-point.png');
 
@@ -91,6 +96,9 @@ try {
   // 3. Triangular (peak left)
   await evalJs(`document.querySelector('#preset-chips .preset-chip[data-preset="tri-left"]').click()`);
   await sleep(500);
+  // Switch to Results to show the diagrams for the triangular load.
+  await evalJs(`document.querySelector('[data-step-target=results]').click()`);
+  await sleep(300);
   await shot('screenshot-triangular.png');
 
   ws.close();
